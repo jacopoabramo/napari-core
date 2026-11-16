@@ -1,0 +1,255 @@
+"""A vispy canvas that follows the camera of a view and emits surface events."""
+
+# pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
+# pyrefly: ignore-errors[bad-argument-type, missing-attribute]
+
+from collections.abc import Callable
+from typing import Generic, Literal, Protocol, TypeVar, cast, runtime_checkable
+
+import numpy as np
+import numpy.typing as npt
+from vispy.app.canvas import MouseEvent
+from vispy.geometry import Rect
+from vispy.scene import PanZoomCamera, SceneCanvas
+
+from napari_core.model import Layer, View
+from napari_core.render import (
+    LayerAdapter,
+    SurfaceEvent,
+    SurfaceEventType,
+    SurfacePointerEvent,
+    SurfaceWheelEvent,
+    create_layer_adapter,
+)
+
+from ._image import BACKEND_NAME
+
+NativeT = TypeVar("NativeT")
+
+WHEEL_NOTCH = 120
+
+
+class _Attachable(Protocol):
+    parent: object | None
+
+
+@runtime_checkable
+class VispyLayerAdapter(LayerAdapter, Protocol):
+    """A layer adapter whose drawing is a visual the surface can attach."""
+
+    @property
+    def visual(self) -> _Attachable: ...
+
+
+class _ViewSync:
+    """Keeps the vispy camera and the layer adapters in step with a view.
+
+    The signals hold these connections to bound methods weakly, so dropping
+    the object is what disconnects them.
+    """
+
+    def __init__(self, view: View, camera: PanZoomCamera, scene: object) -> None:
+        self._view = view
+        self._camera = camera
+        self._scene = scene
+        self._adapters: dict[int, VispyLayerAdapter] = {}
+        view.camera.events.center.connect(self.update_camera)
+        view.camera.events.zoom.connect(self.update_camera)
+        view.events.canvas_size.connect(self.update_camera)
+        for signal in (
+            view.layers.events.inserted,
+            view.layers.events.removed,
+            view.layers.events.changed,
+        ):
+            signal.connect(self.sync_layers)
+        self.update_camera()
+        self.sync_layers()
+
+    def update_camera(self) -> None:
+        """Show the world rectangle the model camera sees, rows downwards."""
+        width, height = self._view.canvas_size
+        if width == 0 or height == 0:
+            return
+        zoom = self._view.camera.zoom
+        row, column = self._view.camera.center
+        visible_width, visible_height = width / zoom, height / zoom
+        self._camera.rect = Rect(
+            column - visible_width / 2,
+            row - visible_height / 2,
+            visible_width,
+            visible_height,
+        )
+
+    def sync_layers(self) -> None:
+        """Close the adapters of removed layers and make those of new ones."""
+        present = {id(layer): layer for layer in self._view.layers}
+        for key in self._adapters.keys() - present.keys():
+            self._adapters.pop(key).close()
+        for key, layer in present.items():
+            if key not in self._adapters:
+                self._adapters[key] = self._make_adapter(layer)
+
+    def _make_adapter(self, layer: Layer) -> VispyLayerAdapter:
+        adapter = create_layer_adapter(BACKEND_NAME, layer, self._view)
+        if not isinstance(adapter, VispyLayerAdapter):
+            adapter.close()
+            raise TypeError(
+                f"the adapter of {type(layer).__name__} has no vispy visual"
+            )
+        adapter.visual.parent = self._scene
+        return adapter
+
+    def close(self) -> None:
+        for adapter in self._adapters.values():
+            adapter.close()
+        self._adapters.clear()
+
+
+def _modifiers(event: MouseEvent) -> tuple[str, ...]:
+    return tuple(str(key.name) for key in event.modifiers)
+
+
+def _buttons(event: MouseEvent) -> tuple[int, ...]:
+    return tuple(int(button) for button in event.buttons)
+
+
+class VispySurface(Generic[NativeT]):
+    """A vispy scene canvas that shows a view and emits surface events.
+
+    The camera of the view moves the picture and the surface never writes to
+    it. Pointer moves are coalesced: the latest one is emitted at the next draw.
+    """
+
+    def __init__(self, view: View, parent: NativeT | None) -> None:
+        self._canvas = SceneCanvas(bgcolor="black", parent=parent, show=False)
+        box = self._canvas.central_widget.add_view()
+        camera = PanZoomCamera()
+        camera.interactive = False
+        camera.flip = (False, True, False)
+        box.camera = camera
+        self._handlers: list[
+            tuple[Callable[[SurfaceEvent], None], tuple[str, ...]]
+        ] = []
+        self._pending_move: SurfacePointerEvent | None = None
+        self._sync: _ViewSync | None = _ViewSync(view, camera, box.scene)
+        events = self._canvas.events
+        events["mouse_press"].connect(self._on_press)
+        events["mouse_release"].connect(self._on_release)
+        events["mouse_double_click"].connect(self._on_double_click)
+        events["mouse_move"].connect(self._on_move)
+        events["mouse_wheel"].connect(self._on_wheel)
+        events["resize"].connect(self._on_resize)
+        events["draw"].connect(self._flush_move)
+
+    @property
+    def native(self) -> NativeT:
+        """The widget to embed in a window."""
+        # vispy leaves the native widget unannotated.
+        return cast(NativeT, self._canvas.native)
+
+    def get_physical_size(self) -> tuple[int, int]:
+        """Return the size in device pixels, `(width, height)`."""
+        width, height = self._canvas.physical_size
+        return (int(width), int(height))
+
+    def get_logical_size(self) -> tuple[float, float]:
+        """Return the size in logical pixels, `(width, height)`."""
+        width, height = self._canvas.size
+        return (float(width), float(height))
+
+    def get_pixel_ratio(self) -> float:
+        """Return the device pixels per logical pixel."""
+        return float(self._canvas.pixel_scale)
+
+    def request_draw(self) -> None:
+        """Ask for a redraw."""
+        self._canvas.update()
+
+    def add_event_handler(
+        self, handler: Callable[[SurfaceEvent], None], *types: SurfaceEventType
+    ) -> None:
+        """Call `handler` for each event of one of `types`."""
+        self._handlers.append((handler, types))
+
+    def screenshot(self) -> npt.NDArray[np.uint8]:
+        """Return the drawn image as RGBA rows."""
+        return np.asarray(self._canvas.render(), dtype=np.uint8)
+
+    def close(self) -> None:
+        """Close the layer adapters and the canvas."""
+        if self._sync is not None:
+            self._sync.close()
+            self._sync = None
+        self._canvas.close()
+
+    def _emit(self, event: SurfaceEvent) -> None:
+        for handler, types in self._handlers:
+            if event["event_type"] in types:
+                handler(event)
+
+    def _flush_move(self, _event: object = None) -> None:
+        if (move := self._pending_move) is not None:
+            self._pending_move = None
+            self._emit(move)
+
+    def _pointer(
+        self,
+        kind: Literal["pointer_down", "pointer_up", "pointer_move", "double_click"],
+        event: MouseEvent,
+    ) -> SurfacePointerEvent:
+        x, y = event.pos[:2]
+        return {
+            "event_type": kind,
+            "x": float(x),
+            "y": float(y),
+            "button": int(event.button or 0),
+            "buttons": _buttons(event),
+            "modifiers": _modifiers(event),
+        }
+
+    def _emit_pointer(
+        self,
+        kind: Literal["pointer_down", "pointer_up", "double_click"],
+        event: MouseEvent,
+    ) -> None:
+        self._flush_move()
+        self._emit(self._pointer(kind, event))
+
+    def _on_press(self, event: MouseEvent) -> None:
+        self._emit_pointer("pointer_down", event)
+
+    def _on_release(self, event: MouseEvent) -> None:
+        self._emit_pointer("pointer_up", event)
+
+    def _on_double_click(self, event: MouseEvent) -> None:
+        self._emit_pointer("double_click", event)
+
+    def _on_move(self, event: MouseEvent) -> None:
+        self._pending_move = self._pointer("pointer_move", event)
+        self._canvas.update()
+
+    def _on_wheel(self, event: MouseEvent) -> None:
+        self._flush_move()
+        x, y = event.pos[:2]
+        dx, dy = event.delta[:2]
+        wheel: SurfaceWheelEvent = {
+            "event_type": "wheel",
+            "x": float(x),
+            "y": float(y),
+            "dx": -WHEEL_NOTCH * float(dx),
+            "dy": -WHEEL_NOTCH * float(dy),
+            "buttons": _buttons(event),
+            "modifiers": _modifiers(event),
+        }
+        self._emit(wheel)
+
+    def _on_resize(self, _event: object) -> None:
+        width, height = self.get_logical_size()
+        self._emit(
+            {
+                "event_type": "resize",
+                "width": width,
+                "height": height,
+                "pixel_ratio": self.get_pixel_ratio(),
+            }
+        )
