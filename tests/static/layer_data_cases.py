@@ -2,8 +2,10 @@
 
 from typing import assert_type
 
+import dask.array as da
 import numpy as np
 
+from napari_core.data import as_layer_data
 from napari_core.typing import LayerDataProtocol
 
 uint8_array: np.ndarray[tuple[int, ...], np.dtype[np.uint8]] = np.zeros(
@@ -14,6 +16,16 @@ float64_array: np.ndarray[tuple[int, ...], np.dtype[np.float64]] = np.zeros((2, 
 bare: LayerDataProtocol = uint8_array
 typed: LayerDataProtocol[np.dtype[np.uint8]] = uint8_array
 mismatched: LayerDataProtocol[np.dtype[np.uint8]] = float64_array  # type: ignore
+
+
+def dask_is_not_layer_data(dask_array: da.Array) -> LayerDataProtocol:
+    """Return a dask array typed as layer data, which the checkers refuse."""
+    return dask_array  # type: ignore
+
+
+def validated_dask(dask_array: da.Array) -> None:
+    """Check the type that validating a dask array gives."""
+    assert_type(as_layer_data(dask_array), LayerDataProtocol)
 
 
 def dtype_of_bare(data: LayerDataProtocol) -> str:
