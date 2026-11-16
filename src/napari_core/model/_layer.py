@@ -2,7 +2,8 @@
 
 import operator
 from abc import abstractmethod
-from typing import ClassVar, Self
+from types import UnionType
+from typing import Annotated, ClassVar, Self, Union, get_args, get_origin
 
 from psygnal import EventedModel
 from pydantic import PrivateAttr
@@ -15,16 +16,39 @@ from ._dims import Dims
 from ._input import MouseCallback, WheelCallback
 
 
+def holds_evented_model(annotation: object) -> bool:
+    """Return whether `annotation` is an evented model or a union that has one.
+
+    `Annotated` is unwrapped; a container of models, such as a list, is not.
+    """
+    origin = get_origin(annotation)
+    if origin is Union or origin is UnionType:
+        return any(holds_evented_model(arg) for arg in get_args(annotation))
+    if origin is Annotated:
+        return holds_evented_model(get_args(annotation)[0])
+    return isinstance(annotation, type) and issubclass(annotation, EventedModel)
+
+
 def use_identity_comparison(cls: type) -> None:
-    """Replace the equality check of the fields that `cls` replaces by object."""
+    """Replace the equality check of the fields that `cls` replaces by object.
+
+    Raises
+    ------
+    TypeError
+        If a name in `compared_by_identity` is not a field of `cls`.
+    """
     if not issubclass(cls, EventedModel):
         return
     for klass in cls.__mro__:
         for field in vars(klass).get("compared_by_identity", ()):
+            if field not in cls.model_fields:
+                raise TypeError(
+                    f"{cls.__name__} lists {field!r} in compared_by_identity, "
+                    "but has no such field"
+                )
             cls.__eq_operators__[field] = operator.is_
     for field, info in cls.model_fields.items():
-        annotation = info.annotation
-        if isinstance(annotation, type) and issubclass(annotation, EventedModel):
+        if holds_evented_model(info.annotation):
             cls.__eq_operators__[field] = operator.is_
 
 
@@ -50,10 +74,12 @@ class LayerMeta(type(EventedModel)):
 class Layer(EventedModel, metaclass=LayerMeta):
     """A drawable item of a view; subclasses supply the data-specific parts.
 
-    A field whose type is an evented model, such as `transform`, is replaced
-    when another object is assigned, even one equal to the old. A class names
-    further fields that behave so in `compared_by_identity`, which adds to the
-    names of its bases.
+    A field whose type is an evented model, such as `transform`, or a union
+    with one, such as `Transform | None`, is replaced when another object is
+    assigned, even one equal to the old. A container of models keeps comparing
+    by its contents, since it is changed in place rather than replaced. A
+    class names further fields that behave so in `compared_by_identity`, which
+    adds to the names of its bases.
     """
 
     model_config = EventedConfigDict(

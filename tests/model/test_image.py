@@ -1,4 +1,4 @@
-from typing import ClassVar
+from typing import Annotated, ClassVar
 
 import dask.array as da
 import numpy as np
@@ -227,6 +227,24 @@ class Tagged(Image):
     token: Token = Token()
 
 
+class WithOptional(Image):
+    """An image type with an optional component."""
+
+    extra: Transform | None = None
+
+
+class WithAnnotatedOptional(Image):
+    """An image type with an optional component wrapped in `Annotated`."""
+
+    extra: Annotated[Transform, "note"] | None = None
+
+
+class WithList(Image):
+    """An image type with a list of components."""
+
+    extras: list[Transform] = []
+
+
 class Plain(Layer):
     """A layer type that is not an image, with a component of its own."""
 
@@ -261,7 +279,6 @@ def test_image_subclass_replaces_equal_components_by_object():
     layer.appearance = layer.appearance.model_copy()
     layer.transform = layer.transform.model_copy()
     assert len(seen) == 2
-    layer.data = stack()
 
 
 def test_layer_that_is_not_an_image_replaces_equal_components_by_object():
@@ -295,3 +312,35 @@ def test_subclass_adds_identity_fields_and_keeps_those_of_its_parent():
     layer.data = stack()
     layer.appearance = layer.appearance.model_copy()
     assert len(seen) == 3 and seen[0] is token
+
+
+@pytest.mark.parametrize("kind", [WithOptional, WithAnnotatedOptional])
+def test_optional_component_is_replaced_by_object(kind):
+    """Emit for each new optional component or `None`, and not for the same object."""
+    layer = kind(name="a", data=stack())
+    seen = []
+    layer.events.extra.connect(seen.append)
+    first = layer.transform.model_copy()
+    second = moving(first)
+    for value in (None, first, first, second, None, first):
+        layer.extra = value
+    assert [id(value) for value in seen] == [id(first), id(second), id(None), id(first)]
+
+
+def test_list_of_components_is_compared_by_contents():
+    """Emit nothing when an equal list of other component objects is assigned."""
+    layer = WithList(name="a", data=stack())
+    transform = layer.transform.model_copy()
+    seen = []
+    layer.events.extras.connect(seen.append)
+    layer.extras = [transform]
+    layer.extras = [moving(transform)]
+    assert len(seen) == 1
+
+
+def test_identity_name_that_is_not_a_field_is_refused():
+    """Refuse a class whose `compared_by_identity` names a field it does not have."""
+    with pytest.raises(TypeError, match="Misspelled.*'dta'"):
+
+        class Misspelled(Image):
+            compared_by_identity: ClassVar[tuple[str, ...]] = ("dta",)
