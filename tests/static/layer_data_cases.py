@@ -6,6 +6,7 @@ import dask.array as da
 import numpy as np
 
 from napari_core.data import as_layer_data
+from napari_core.model import ButtonEvent, Image, Layer
 from napari_core.typing import LayerDataProtocol
 
 uint8_array: np.ndarray[tuple[int, ...], np.dtype[np.uint8]] = np.zeros(
@@ -32,3 +33,21 @@ def dtype_of_bare(data: LayerDataProtocol) -> str:
     """Return the dtype kind of bare layer data."""
     assert_type(data.dtype, np.dtype[np.generic])
     return data.dtype.kind
+
+
+class OtherLayer(Layer):
+    """A layer type that is not an image."""
+
+
+def on_drag(layer: Image, event: ButtonEvent) -> None:
+    """Handle a drag on an image."""
+
+
+def on_other_drag(layer: OtherLayer, event: ButtonEvent) -> None:
+    """Handle a drag on another layer type."""
+
+
+def register(layer: Image) -> None:
+    """Add callbacks to an image, where one typed for another layer fails."""
+    layer.mouse_drag_callbacks.append(on_drag)
+    layer.mouse_drag_callbacks.append(on_other_drag)  # type: ignore
