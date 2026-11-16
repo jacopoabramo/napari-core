@@ -1,5 +1,5 @@
 import pytest
-from helpers import pointer, wheel
+from helpers import pointer, view_with_image, wheel
 
 from napari_core.interaction import attach, surface_to_world
 from napari_core.model import Camera, View
@@ -68,4 +68,101 @@ def test_zero_sized_surface_moves_nothing(surface):
     surface.emit(wheel(0, 0, dy=-120))
     surface.emit(pointer("pointer_down", 0, 0, button=1))
     surface.emit(pointer("pointer_move", 5, 5, button=1))
+    assert (v.camera.center, v.camera.zoom) == ((10.0, 20.0), 2.0)
+
+
+def test_mouse_pan_switched_off_mid_drag_does_not_jump(surface):
+    """Resume panning from the latest pointer position after mouse_pan is back on."""
+    v = view()
+    attach(v, surface)
+    surface.emit(pointer("pointer_down", 100, 50, button=1))
+    v.camera.mouse_pan = False
+    surface.emit(pointer("pointer_move", 120, 60, button=1))
+    v.camera.mouse_pan = True
+    surface.emit(pointer("pointer_move", 130, 70, button=1))
+    assert v.camera.center == (5.0, 15.0)
+
+
+def test_right_button_drag_does_not_pan(surface):
+    """Pan only on the left button."""
+    v = view()
+    attach(v, surface)
+    surface.emit(pointer("pointer_down", 100, 50, button=2))
+    surface.emit(pointer("pointer_move", 120, 60, button=2))
+    surface.emit(pointer("pointer_up", 120, 60, button=2))
+    assert v.camera.center == (10.0, 20.0)
+
+
+def test_release_without_press_changes_nothing(surface):
+    """Ignore a release and a following move that no press started."""
+    v = view()
+    attach(v, surface)
+    surface.emit(pointer("pointer_up", 100, 50, button=1))
+    surface.emit(pointer("pointer_move", 120, 60))
+    assert v.camera.center == (10.0, 20.0)
+
+
+def test_release_of_another_button_keeps_the_drag(surface):
+    """End a left drag only on the release of the left button."""
+    v = view()
+    attach(v, surface)
+    surface.emit(pointer("pointer_down", 100, 50, button=1))
+    surface.emit(pointer("pointer_up", 100, 50, button=2))
+    surface.emit(pointer("pointer_move", 120, 60, button=1))
+    assert v.camera.center == (5.0, 10.0)
+
+
+def test_hidden_layer_does_not_stop_panning(surface):
+    """Pan a view whose only layer is not visible."""
+    v, layer, _ = view_with_image()
+    layer.visible = False
+    v.camera.zoom, v.camera.center = 2.0, (10.0, 20.0)
+    attach(v, surface)
+    surface.emit(pointer("pointer_down", 100, 50, button=1))
+    surface.emit(pointer("pointer_move", 120, 60, button=1))
+    assert v.camera.center == (5.0, 10.0)
+
+
+def test_handled_release_still_ends_the_drag(surface):
+    """End the drag on a handled release, so a later hover does not pan."""
+    v, layer, _ = view_with_image()
+    v.camera.zoom, v.camera.center = 2.0, (10.0, 20.0)
+
+    def claim_release(lyr, event):
+        while event.type != "mouse_release":
+            yield
+        event.handled = True
+
+    layer.mouse_drag_callbacks.append(claim_release)
+    attach(v, surface)
+    surface.emit(pointer("pointer_down", 100, 50, button=1))
+    surface.emit(pointer("pointer_up", 100, 50, button=1))
+    surface.emit(pointer("pointer_move", 120, 60))
+    assert v.camera.center == (10.0, 20.0)
+
+
+def test_handled_move_still_advances_the_drag(surface):
+    """Pan on the next move only by the distance since the handled move."""
+    v, layer, _ = view_with_image()
+    v.camera.zoom, v.camera.center = 2.0, (10.0, 20.0)
+
+    def claim_first_move(lyr, event):
+        yield
+        event.handled = True
+        yield
+
+    layer.mouse_drag_callbacks.append(claim_first_move)
+    attach(v, surface)
+    surface.emit(pointer("pointer_down", 100, 50, button=1))
+    surface.emit(pointer("pointer_move", 110, 55, button=1))
+    surface.emit(pointer("pointer_move", 120, 60, button=1))
+    assert v.camera.center == (7.5, 15.0)
+
+
+@pytest.mark.parametrize("dy", [1e10, -1e10, float("inf"), float("nan")])
+def test_wheel_step_that_breaks_the_zoom_is_skipped(surface, dy):
+    """Leave zoom and centre alone when the new zoom is not finite and positive."""
+    v = view()
+    attach(v, surface)
+    surface.emit(wheel(150, 20, dy=dy))
     assert (v.camera.center, v.camera.zoom) == ((10.0, 20.0), 2.0)

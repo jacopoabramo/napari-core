@@ -46,7 +46,7 @@ class _Dispatcher:
         self._view = view
         self._camera = CameraController(view)
         self._last_pos = (0.0, 0.0)
-        self._drags: list[tuple[ButtonEvent, Generator[None, None, None]]] = []
+        self._drags: list[tuple[ButtonEvent, Generator[None, None, None], str]] = []
         self.active = True
 
     def handle(self, event: SurfaceEvent) -> None:
@@ -146,45 +146,50 @@ class _Dispatcher:
                 self._resume_drags(event)
             case WheelEvent() if layer is not None:
                 for callback in layer.mouse_wheel_callbacks:
-                    _run(partial(callback, layer, event))
+                    _run(partial(callback, layer, event), _label(callback, layer))
             case _:
                 pass
-        if not event.handled and isinstance(event, ButtonEvent | WheelEvent):
+        if isinstance(event, ButtonEvent | WheelEvent):
             self._camera.handle(event)
 
     def _start_drags(self, layer: Layer, event: ButtonEvent) -> None:
         for callback in layer.mouse_drag_callbacks:
-            result = _run(partial(callback, layer, event))
-            if isinstance(result, Generator) and _advance(result):
-                self._drags.append((event, result))
+            label = _label(callback, layer)
+            result = _run(partial(callback, layer, event), label)
+            if isinstance(result, Generator) and _advance(result, label):
+                self._drags.append((event, result, label))
 
     def _resume_drags(self, event: ButtonEvent) -> None:
         drags = self._drags
         self._drags = []
-        for held, generator in drags:
+        for held, generator, label in drags:
             for field in fields(held):
                 setattr(held, field.name, getattr(event, field.name))
-            alive = _advance(generator)
+            alive = _advance(generator, label)
             event.handled = event.handled or held.handled
             if alive and event.type == "mouse_move":
-                self._drags.append((held, generator))
+                self._drags.append((held, generator, label))
 
 
-def _run(call: Callable[[], R]) -> R | None:
+def _label(callback: object, layer: Layer) -> str:
+    return f"{callback!r} of layer {layer.name!r}"
+
+
+def _run(call: Callable[[], R], label: str) -> R | None:
     try:
         return call()
     except Exception:
-        logger.exception("input callback raised")
+        logger.exception("input callback %s raised", label)
         return None
 
 
-def _advance(generator: Generator[None, None, None]) -> bool:
+def _advance(generator: Generator[None, None, None], label: str) -> bool:
     try:
         next(generator)
     except StopIteration:
         return False
     except Exception:
-        logger.exception("input callback raised")
+        logger.exception("input callback %s raised", label)
         return False
     return True
 
@@ -193,8 +198,15 @@ def attach(view: View, surface: RenderSurface[object]) -> Callable[[], None]:
     """Make `surface` drive `view` and return a function that disconnects it.
 
     The events of the surface reach the callbacks of the top visible layer
-    first, then the camera, unless a callback set `handled`. A `resize` writes
-    the view's `canvas_size`.
+    first, then the camera, which does not move when a callback set `handled`.
+    A `resize` writes the view's `canvas_size`.
+
+    Attaching the same surface and view twice dispatches every event twice.
+    The returned function makes the handler do nothing; it does not remove it
+    from the surface.
+
+    A modifier name that the surface sends and that is not `Shift`,
+    `Control`, `Alt` or `Meta` makes the handler raise `ValueError`.
     """
     dispatcher = _Dispatcher(view)
     surface.add_event_handler(dispatcher.handle, *_EVENT_TYPES)
