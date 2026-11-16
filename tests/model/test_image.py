@@ -1,9 +1,12 @@
+from typing import ClassVar
+
 import dask.array as da
 import numpy as np
 import pytest
 
 from napari_core.data import as_layer_data
-from napari_core.model import COLORMAPS, Dims, Image, Transform
+from napari_core.model import COLORMAPS, Dims, Image, Layer, Transform
+from napari_core.typing import SliceArray
 
 
 def stack():
@@ -200,3 +203,95 @@ def test_shortcut_setters_write_through_to_the_existing_components():
     layer.translate = (1.0,) * 3
     assert layer.appearance is appearance and layer.transform is transform
     assert appearance.gamma == 0.5 and transform.scale == (2.0,) * 3
+
+
+class Token:
+    """A value that is equal to every other token."""
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, Token)
+
+    def __hash__(self) -> int:
+        return 0
+
+
+class Special(Image):
+    """An image type that adds nothing."""
+
+
+class Tagged(Image):
+    """An image type with a field that is replaced by object."""
+
+    compared_by_identity: ClassVar[tuple[str, ...]] = ("token",)
+
+    token: Token = Token()
+
+
+class Plain(Layer):
+    """A layer type that is not an image, with a component of its own."""
+
+    data: int = 0
+    extra: Transform
+
+    @property
+    def ndim(self) -> int:
+        return 2
+
+    @property
+    def extent_steps(self) -> tuple[int, ...]:
+        return (2, 2)
+
+    def slice(self, dims: Dims) -> SliceArray:
+        return np.zeros((2, 2), dtype=np.uint8)
+
+
+def moving(transform: Transform) -> Transform:
+    """Return an equal transform that is another object."""
+    return transform.model_copy()
+
+
+def test_image_subclass_replaces_equal_components_by_object():
+    """Emit once for an equal but distinct component and not for the same one."""
+    layer = Special(name="a", data=stack())
+    seen = []
+    layer.events.appearance.connect(seen.append)
+    layer.events.transform.connect(seen.append)
+    layer.appearance, layer.transform = layer.appearance, layer.transform
+    assert seen == []
+    layer.appearance = layer.appearance.model_copy()
+    layer.transform = layer.transform.model_copy()
+    assert len(seen) == 2
+    layer.data = stack()
+
+
+def test_layer_that_is_not_an_image_replaces_equal_components_by_object():
+    """Compare every component of a new layer type, including its own, by object."""
+    transform = Transform(scale=(1.0, 1.0), translate=(0.0, 0.0))
+    layer = Plain(name="p", transform=transform, extra=transform.model_copy())
+    seen = []
+    layer.events.transform.connect(seen.append)
+    layer.events.extra.connect(seen.append)
+    layer.transform, layer.extra = layer.transform, layer.extra
+    assert seen == []
+    new_transform, new_extra = moving(layer.transform), moving(layer.extra)
+    layer.transform = new_transform
+    layer.extra = new_extra
+    assert seen == [new_transform, new_extra]
+
+
+def test_subclass_adds_identity_fields_and_keeps_those_of_its_parent():
+    """Replace a named field by object, and the data and components as well."""
+    layer = Tagged(name="a", data=stack())
+    seen = []
+    layer.events.token.connect(seen.append)
+    layer.events.data.connect(seen.append)
+    layer.events.appearance.connect(seen.append)
+    layer.token = layer.token
+    layer.data = layer.data
+    layer.appearance = layer.appearance
+    assert seen == []
+    token = Token()
+    layer.token = token
+    layer.data = stack()
+    layer.appearance = layer.appearance.model_copy()
+    assert len(seen) == 3 and seen[0] is token

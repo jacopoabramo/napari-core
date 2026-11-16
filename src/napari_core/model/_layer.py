@@ -1,7 +1,8 @@
 """The base class of layers."""
 
+import operator
 from abc import abstractmethod
-from typing import Self
+from typing import ClassVar, Self
 
 from psygnal import EventedModel
 from pydantic import PrivateAttr
@@ -14,8 +15,46 @@ from ._dims import Dims
 from ._input import MouseCallback, WheelCallback
 
 
-class Layer(EventedModel):
-    """A drawable item of a view; subclasses supply the data-specific parts."""
+def use_identity_comparison(cls: type) -> None:
+    """Replace the equality check of the fields that `cls` replaces by object."""
+    if not issubclass(cls, EventedModel):
+        return
+    for klass in cls.__mro__:
+        for field in vars(klass).get("compared_by_identity", ()):
+            cls.__eq_operators__[field] = operator.is_
+    for field, info in cls.model_fields.items():
+        annotation = info.annotation
+        if isinstance(annotation, type) and issubclass(annotation, EventedModel):
+            cls.__eq_operators__[field] = operator.is_
+
+
+class LayerMeta(type(EventedModel)):
+    """Makes the fields of a layer class that are replaced by object compare so.
+
+    psygnal builds the comparison of each field when it creates a class, after
+    any hook of pydantic has run, so only a metaclass can change it.
+    """
+
+    def __new__(
+        mcs,
+        name: str,
+        bases: tuple[type, ...],
+        namespace: dict[str, object],
+        **kwargs: object,
+    ) -> "LayerMeta":
+        cls = super().__new__(mcs, name, bases, namespace, **kwargs)
+        use_identity_comparison(cls)
+        return cls
+
+
+class Layer(EventedModel, metaclass=LayerMeta):
+    """A drawable item of a view; subclasses supply the data-specific parts.
+
+    A field whose type is an evented model, such as `transform`, is replaced
+    when another object is assigned, even one equal to the old. A class names
+    further fields that behave so in `compared_by_identity`, which adds to the
+    names of its bases.
+    """
 
     model_config = EventedConfigDict(
         validate_assignment=True,
@@ -30,6 +69,8 @@ class Layer(EventedModel):
     visible: bool = True
     opacity: float = 1.0
     transform: Transform
+
+    compared_by_identity: ClassVar[tuple[str, ...]] = ()
 
     _mouse_drag_callbacks: list[MouseCallback[Self]] = PrivateAttr(
         default_factory=lambda: []
