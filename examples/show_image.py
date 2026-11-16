@@ -65,7 +65,7 @@ class ImageWindow(QMainWindow):
 
 def main() -> None:
     """Parse the arguments, show the window and run the event loop."""
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument("--dask", action="store_true", help="wrap the stack in dask")
     args = parser.parse_args()
     use_app("pyqt6")

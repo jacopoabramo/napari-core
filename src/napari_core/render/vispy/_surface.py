@@ -121,6 +121,12 @@ class VispySurface(Generic[NativeT]):
     Vispy drops a pointer move that arrives within 10 ms of the previous one,
     so the last position of a fast burst may not be reported. Layers are drawn
     in the order they were added, not in list order after a reorder.
+
+    The surface lives as long as its native widget object does, whether or not
+    the caller keeps the surface. Calling `close` on the surface
+    releases it, and so does dropping the widget object. Closing the widget
+    with its own `close()` does not: a widget that is closed but still
+    referenced keeps following the model.
     """
 
     def __init__(self, view: View, parent: NativeT | None) -> None:
@@ -146,13 +152,12 @@ class VispySurface(Generic[NativeT]):
         events["mouse_wheel"].connect(self._on_wheel)
         events["resize"].connect(self._on_resize)
         events["draw"].connect(self._flush_move)
-        events["close"].connect(self._release)
         try:
             self._sync: ViewSync | None = ViewSync(view, camera, box.scene)
         except BaseException:
             self._canvas.close()
             raise
-        # Handlers are held weakly, so the widget owns the surface.
+        # vispy and psygnal hold the handlers weakly, so the widget keeps the surface.
         setattr(self._canvas.native, OWNER_ATTRIBUTE, self)
 
     @property

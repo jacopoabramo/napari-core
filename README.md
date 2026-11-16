@@ -7,7 +7,7 @@ napari, and it is not released.
 ## Run the example
 
 ```
-uv sync --all-extras
+uv sync
 uv run python examples/show_image.py
 ```
 

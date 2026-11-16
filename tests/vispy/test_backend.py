@@ -1,4 +1,5 @@
 import gc
+import logging
 import weakref
 
 import numpy as np
@@ -255,10 +256,12 @@ def test_transform_places_the_centre_of_pixel_zero_at_translate(
     surface.close()
 
 
-def test_failed_surface_closes_its_canvas(
-    qapp: Application, monkeypatch: pytest.MonkeyPatch
+def test_failed_surface_closes_its_canvas_and_logs_no_error(
+    qapp: Application,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Close the vispy canvas when a layer has no adapter and the surface fails."""
+    """Close the canvas quietly when a layer has no adapter and the surface fails."""
     closed: list[SceneCanvas] = []
 
     class RecordingCanvas(SceneCanvas):
@@ -287,9 +290,12 @@ def test_failed_surface_closes_its_canvas(
     viewer.layers.append(
         Plain(name="p", transform=Transform(scale=(1.0, 1.0), translate=(0.0, 0.0)))
     )
+    caplog.set_level(logging.ERROR)
+    caplog.set_level(logging.ERROR, logger="vispy")
     with pytest.raises(LookupError):
         VispyBackend[QWidget]().create_surface(viewer.view, None)
     assert len(closed) == 1
+    assert not caplog.records
 
 
 def test_equal_replacement_appearance_is_followed_and_the_old_one_is_not(
@@ -377,3 +383,21 @@ def test_closed_surface_is_freed_and_ignores_the_model(qapp: Application) -> Non
     viewer.camera.center = (10_000.0, 10_000.0)
     viewer.layers[0].gamma = 0.5
     viewer.layers.clear()
+
+
+def test_widget_close_keeps_the_surface_until_it_is_dropped(
+    qapp: Application,
+) -> None:
+    """Close the widget, then the surface twice, then free it with the widget."""
+    viewer = ViewerModel()
+    viewer.layers.append(white_image())
+    surface = shown(viewer, qapp)
+    native = surface.native
+    reference = weakref.ref(surface)
+    native.close()
+    viewer.camera.center = (10_000.0, 10_000.0)
+    surface.close()
+    surface.close()
+    del surface, native
+    gc.collect()
+    assert reference() is None
