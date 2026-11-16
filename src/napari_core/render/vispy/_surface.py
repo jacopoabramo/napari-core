@@ -1,7 +1,6 @@
 """A vispy canvas that follows the camera of a view and emits surface events."""
 
 # pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
-# pyrefly: ignore-errors[bad-argument-type, missing-attribute]
 
 from collections.abc import Callable
 from typing import Generic, Literal, Protocol, TypeVar, cast, runtime_checkable
@@ -29,7 +28,7 @@ NativeT = TypeVar("NativeT")
 WHEEL_NOTCH = 120
 
 
-class _Attachable(Protocol):
+class Attachable(Protocol):
     parent: object | None
 
 
@@ -38,10 +37,10 @@ class VispyLayerAdapter(LayerAdapter, Protocol):
     """A layer adapter whose drawing is a visual the surface can attach."""
 
     @property
-    def visual(self) -> _Attachable: ...
+    def visual(self) -> Attachable: ...
 
 
-class _ViewSync:
+class ViewSync:
     """Keeps the vispy camera and the layer adapters in step with a view.
 
     The signals hold these connections to bound methods weakly, so dropping
@@ -105,11 +104,11 @@ class _ViewSync:
         self._adapters.clear()
 
 
-def _modifiers(event: MouseEvent) -> tuple[str, ...]:
+def modifier_names(event: MouseEvent) -> tuple[str, ...]:
     return tuple(str(key.name) for key in event.modifiers)
 
 
-def _buttons(event: MouseEvent) -> tuple[int, ...]:
+def pressed_buttons(event: MouseEvent) -> tuple[int, ...]:
     return tuple(int(button) for button in event.buttons)
 
 
@@ -118,10 +117,17 @@ class VispySurface(Generic[NativeT]):
 
     The camera of the view moves the picture and the surface never writes to
     it. Pointer moves are coalesced: the latest one is emitted at the next draw.
+    Vispy drops a pointer move that arrives within 10 ms of the previous one,
+    so the last position of a fast burst may not be reported. Layers are drawn
+    in the order they were added, not in list order after a reorder.
     """
 
     def __init__(self, view: View, parent: NativeT | None) -> None:
-        self._canvas = SceneCanvas(bgcolor="black", parent=parent, show=False)
+        self._canvas = SceneCanvas(
+            bgcolor="black",
+            parent=parent,  # pyrefly: ignore[bad-argument-type]
+            show=False,
+        )
         box = self._canvas.central_widget.add_view()
         camera = PanZoomCamera()
         camera.interactive = False
@@ -131,8 +137,7 @@ class VispySurface(Generic[NativeT]):
             tuple[Callable[[SurfaceEvent], None], tuple[str, ...]]
         ] = []
         self._pending_move: SurfacePointerEvent | None = None
-        self._sync: _ViewSync | None = _ViewSync(view, camera, box.scene)
-        events = self._canvas.events
+        events = self._canvas.events  # pyrefly: ignore[missing-attribute]
         events["mouse_press"].connect(self._on_press)
         events["mouse_release"].connect(self._on_release)
         events["mouse_double_click"].connect(self._on_double_click)
@@ -140,6 +145,11 @@ class VispySurface(Generic[NativeT]):
         events["mouse_wheel"].connect(self._on_wheel)
         events["resize"].connect(self._on_resize)
         events["draw"].connect(self._flush_move)
+        try:
+            self._sync: ViewSync | None = ViewSync(view, camera, box.scene)
+        except BaseException:
+            self._canvas.close()
+            raise
 
     @property
     def native(self) -> NativeT:
@@ -203,8 +213,8 @@ class VispySurface(Generic[NativeT]):
             "x": float(x),
             "y": float(y),
             "button": int(event.button or 0),
-            "buttons": _buttons(event),
-            "modifiers": _modifiers(event),
+            "buttons": pressed_buttons(event),
+            "modifiers": modifier_names(event),
         }
 
     def _emit_pointer(
@@ -238,8 +248,8 @@ class VispySurface(Generic[NativeT]):
             "y": float(y),
             "dx": -WHEEL_NOTCH * float(dx),
             "dy": -WHEEL_NOTCH * float(dy),
-            "buttons": _buttons(event),
-            "modifiers": _modifiers(event),
+            "buttons": pressed_buttons(event),
+            "modifiers": modifier_names(event),
         }
         self._emit(wheel)
 
