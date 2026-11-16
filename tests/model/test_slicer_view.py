@@ -1,0 +1,112 @@
+import gc
+import weakref
+
+import numpy as np
+
+from napari_core.model import Image, ViewerModel
+
+
+def test_adding_a_layer_sizes_the_dims_and_slices_it():
+    """Fit dims to the layers and slice a layer when it is added."""
+    viewer = ViewerModel()
+    layer = Image(name="a", data=np.zeros((5, 3, 4)))
+    viewer.layers.append(layer)
+    assert viewer.dims.ndim == 3
+    assert viewer.dims.nsteps == (5, 3, 4)
+    assert viewer.view.slicer.response(layer).shape == (3, 4)
+
+
+def test_changing_the_step_slices_again_and_emits_the_layer():
+    """Emit sliced with the layer when the current step changes."""
+    viewer = ViewerModel()
+    data = np.arange(60).reshape(5, 3, 4)
+    layer = Image(name="a", data=data)
+    viewer.layers.append(layer)
+    seen = []
+    viewer.view.slicer.sliced.connect(seen.append)
+    viewer.dims.current_step = (2, 0, 0)
+    assert seen == [layer]
+    np.testing.assert_array_equal(viewer.view.slicer.response(layer), data[2])
+
+
+def test_assigning_data_slices_again():
+    """Slice a layer again when its data is replaced."""
+    viewer = ViewerModel()
+    layer = Image(name="a", data=np.zeros((5, 3, 4)))
+    viewer.layers.append(layer)
+    layer.data = np.ones((5, 3, 4))
+    assert viewer.view.slicer.response(layer).max() == 1
+
+
+def test_removed_layer_is_forgotten():
+    """Drop the slice of a removed layer and stop following it."""
+    viewer = ViewerModel()
+    layer = Image(name="a", data=np.zeros((5, 3, 4)))
+    viewer.layers.append(layer)
+    viewer.layers.remove(layer)
+    seen = []
+    viewer.view.slicer.sliced.connect(seen.append)
+    layer.data = np.ones((5, 3, 4))
+    assert viewer.view.slicer.response(layer) is None
+    assert seen == []
+    assert viewer.dims.nsteps == (1, 1)
+
+
+def test_one_layer_in_two_views_has_a_slice_in_each():
+    """Keep a separate slice of the same layer for each view."""
+    data = np.arange(60).reshape(5, 3, 4)
+    layer = Image(name="a", data=data)
+    first, second = ViewerModel(), ViewerModel()
+    first.layers.append(layer)
+    second.layers.append(layer)
+    second.dims.current_step = (4, 0, 0)
+    np.testing.assert_array_equal(first.view.slicer.response(layer), data[0])
+    np.testing.assert_array_equal(second.view.slicer.response(layer), data[4])
+
+
+def test_every_way_of_changing_the_list_keeps_the_slices_in_step():
+    """Track the layers through insert, pop, slice assignment, del and clear."""
+    viewer = ViewerModel()
+    slicer = viewer.view.slicer
+    big = Image(name="big", data=np.zeros((5, 3, 4)))
+    flat = Image(name="flat", data=np.zeros((6, 7)))
+    other = Image(name="other", data=np.zeros((2, 3, 4)))
+
+    viewer.layers.insert(0, big)
+    viewer.layers.extend([flat, other])
+    assert viewer.dims.nsteps == (5, 6, 7)
+    assert slicer.response(flat).shape == (6, 7)
+
+    assert viewer.layers.pop() is other
+    assert slicer.response(other) is None
+
+    viewer.layers[0:2] = [other]
+    assert slicer.response(big) is slicer.response(flat) is None
+    assert slicer.response(other).shape == (3, 4)
+    assert viewer.dims.nsteps == (2, 3, 4)
+
+    viewer.layers[0] = big
+    assert slicer.response(other) is None
+    assert slicer.response(big).shape == (3, 4)
+
+    viewer.layers.append(big)
+    del viewer.layers[0]
+    assert slicer.response(big) is not None
+    assert len(big.events.data) == 1
+
+    viewer.layers.clear()
+    assert slicer.response(big) is None
+    assert len(big.events.data) == 0
+    assert viewer.dims.ndim == 2
+
+
+def test_view_is_freed_with_its_layer_still_alive():
+    """Leave no connection from the layer to the view or its slicer."""
+    layer = Image(name="a", data=np.zeros((5, 3, 4)))
+    viewer = ViewerModel()
+    viewer.layers.append(layer)
+    kept = weakref.ref(viewer.view.slicer)
+    del viewer
+    gc.collect()
+    assert kept() is None
+    layer.data = np.ones((5, 3, 4))

@@ -18,7 +18,9 @@ from ._input import (
     WheelEvent,
 )
 from ._layer import Layer
+from ._slicer import Slicer
 from ._view import View
+from ._viewer import ViewerModel
 
 __all__ = [
     "COLORMAPS",
@@ -36,8 +38,10 @@ __all__ = [
     "Modifier",
     "MouseCallback",
     "PointerEvent",
+    "Slicer",
     "Transform",
     "View",
+    "ViewerModel",
     "WheelCallback",
     "WheelEvent",
 ]
