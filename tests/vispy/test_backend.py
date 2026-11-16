@@ -67,6 +67,8 @@ def white_image() -> Image:
 
 def shown(viewer: ViewerModel, qapp: Application) -> RenderSurface[QWidget]:
     """Return a surface of the viewer's view, shown at 200 by 100 pixels."""
+    # Free earlier tests' canvases now: a collection during a Qt event crashed.
+    gc.collect()
     surface = VispyBackend[QWidget]().create_surface(viewer.view, None)
     viewer.view.canvas_size = (200, 100)
     surface.native.resize(200, 100)
