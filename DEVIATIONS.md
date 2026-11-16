@@ -251,10 +251,11 @@ The target's `LayerDataProtocol.__getitem__` returns
 The prototype's returns `object`. Only an array's own adapter indexes layer
 data (in `ArrayAdapter.materialize`), and the adapter knows its library's
 types, so no code in the core reads the result through the protocol. A precise
-result type only excludes arrays: when the design was checked with pyright
-and mypy against zarr 3.4.2, a zarr `Array` failed a protocol whose
-`__getitem__` returns `Self`, because indexing it returns a NumPy array. This
-was not checked again; zarr is not installed in the prototype's environment.
+result type only excludes arrays: in a check with pyright and mypy against
+zarr 3.4.2, made before the code was written, a zarr `Array` failed a protocol
+whose `__getitem__` returns `Self`, because indexing it returns a NumPy array.
+This was not checked again; zarr is not installed in the prototype's
+environment.
 
 Recommendation: change the target to return `object`.
 
@@ -346,9 +347,9 @@ out. `Colormap` is a model of its own with a name and an RGBA table, and
 napari users know are properties on `Image` that read and write the
 components: `colormap`, `contrast_limits`, `gamma`, `scale` and `translate`.
 
-Recommendation: change neither. Declared components held for `Image`, for the
-vispy adapter that follows them and for layer subclasses, once they compared
-by identity (next entry).
+Recommendation: change neither. Declaring components as fields worked for
+`Image`, for the vispy adapter that follows them and for layer subclasses,
+once they were compared by identity (next entry).
 
 ### Components and `data` compare by identity
 
@@ -468,7 +469,7 @@ way without an error, so a caller must set `ndim` first, or an axis is lost.
 Recommendation: change the target to give `Dims` these fields and the rule for
 a change of `ndim`.
 
-### `Dims` count data steps, and world coordinates are `(row, column)`
+### `Dims` counts data steps, and world coordinates are `(row, column)`
 
 The target maps a layer's axes onto world axes through its transform, and does
 not fix the order of the world coordinates of the displayed plane.
@@ -615,7 +616,7 @@ is a `QWidget` to the checker. There are no `input`, `state` or `frame_drawn`
 signals, no `SurfaceState`, `Viewbox` or `Capabilities`, and `screenshot` takes
 no size and does not wait. There is no way to remove an event handler.
 
-A rendercanvas canvas would still not satisfy this protocol. When the design
+A rendercanvas canvas would still not satisfy this protocol. Before the code
 was written, rendercanvas 3.0.0 had no `screenshot` and no public `native`,
 its `add_event_handler` took `(*args, order=0)` with handlers typed
 `Callable[[dict], None]`, and it shipped no `py.typed`. A pygfx backend would
