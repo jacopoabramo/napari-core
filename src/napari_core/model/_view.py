@@ -33,10 +33,13 @@ def _layer_list(layers: Iterable[object] = ()) -> EventedList[Layer]:
 class View(EventedModel):
     """The layers shown together, with their dims, camera and canvas size.
 
-    The `dims` and the `layers` list can be changed but not replaced. Dims
-    follow the layers: `ndim` is the largest number of axes among them, at
-    least 2, and `nsteps` the largest extent on each axis, aligned to the last
-    axis.
+    The `dims`, the `camera` and the `layers` list can be changed through
+    their fields and items but not replaced, and assigning any of them raises.
+    The slicer and the surfaces that show the view connect to these objects
+    once, so a replacement would leave them following an object nobody
+    changes. Dims follow the layers: `ndim` is the largest number of axes
+    among them, at least 2, and `nsteps` the largest extent on each axis,
+    aligned to the last axis.
 
     Attributes
     ----------
@@ -47,7 +50,7 @@ class View(EventedModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
 
     dims: Dims = Field(default_factory=Dims, frozen=True)
-    camera: Camera = Field(default_factory=Camera)
+    camera: Camera = Field(default_factory=Camera, frozen=True)
     canvas_size: tuple[int, int] = (640, 480)
     layers: Annotated[EventedList[Layer], PlainValidator(_layer_list)] = Field(
         default_factory=_layer_list, frozen=True

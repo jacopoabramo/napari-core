@@ -3,7 +3,18 @@ import weakref
 import numpy as np
 import pytest
 
-from napari_core.model import Image, View, ViewerModel
+from napari_core.model import Camera, Image, View, ViewerModel
+
+
+def test_camera_cannot_be_replaced():
+    """Refuse a new camera and keep the old one, which still takes field changes."""
+    view = View()
+    camera = view.camera
+    with pytest.raises(ValueError, match="frozen"):
+        view.camera = Camera(center=(1e4, 1e4))
+    assert view.camera is camera
+    view.camera.zoom = 3.0
+    assert camera.zoom == 3.0
 
 
 def test_adding_a_layer_sizes_the_dims_and_slices_it():

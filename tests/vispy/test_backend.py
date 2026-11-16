@@ -13,7 +13,14 @@ from vispy.app import Application
 from vispy.scene import SceneCanvas
 
 from napari_core.interaction import attach
-from napari_core.model import Image, IntensityAppearance, Layer, Transform, ViewerModel
+from napari_core.model import (
+    Camera,
+    Image,
+    IntensityAppearance,
+    Layer,
+    Transform,
+    ViewerModel,
+)
 from napari_core.render import RenderSurface, SurfaceEvent, create_layer_adapter
 from napari_core.render.vispy import VispyBackend
 
@@ -94,6 +101,22 @@ def test_camera_change_moves_the_image(qapp: Application) -> None:
     assert middle(surface.screenshot()) != BACKGROUND
     viewer.camera.center = (10_000.0, 10_000.0)
     qapp.process_events()
+    assert middle(surface.screenshot()) == BACKGROUND
+    surface.close()
+
+
+def test_surface_follows_the_camera_after_a_refused_replacement(
+    qapp: Application,
+) -> None:
+    """Keep following the camera's fields after assigning a new camera failed."""
+    viewer = ViewerModel()
+    viewer.layers.append(white_image())
+    viewer.camera.center = (25.0, 25.0)
+    surface = shown(viewer, qapp)
+    with pytest.raises(ValueError, match="frozen"):
+        viewer.view.camera = Camera(center=(10_000.0, 10_000.0))
+    assert middle(surface.screenshot()) != BACKGROUND
+    viewer.camera.center = (10_000.0, 10_000.0)
     assert middle(surface.screenshot()) == BACKGROUND
     surface.close()
 
