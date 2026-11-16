@@ -1,9 +1,9 @@
-import gc
 import weakref
 
 import numpy as np
+import pytest
 
-from napari_core.model import Image, ViewerModel
+from napari_core.model import Image, View, ViewerModel
 
 
 def test_adding_a_layer_sizes_the_dims_and_slices_it():
@@ -101,12 +101,51 @@ def test_every_way_of_changing_the_list_keeps_the_slices_in_step():
 
 
 def test_view_is_freed_with_its_layer_still_alive():
-    """Leave no connection from the layer to the view or its slicer."""
+    """Free the view without the cycle collector and leave no connection behind."""
     layer = Image(name="a", data=np.zeros((5, 3, 4)))
     viewer = ViewerModel()
     viewer.layers.append(layer)
     kept = weakref.ref(viewer.view.slicer)
     del viewer
-    gc.collect()
     assert kept() is None
+    assert len(layer.events.data) == 0
     layer.data = np.ones((5, 3, 4))
+
+
+def test_replacing_data_with_another_shape_refits_the_dims():
+    """Refit nsteps when data changes shape, then slice with the new dims."""
+    viewer = ViewerModel()
+    layer = Image(name="a", data=np.zeros((5, 3, 4)))
+    viewer.layers.append(layer)
+    longer = np.arange(108).reshape(9, 3, 4)
+    layer.data = longer
+    assert viewer.dims.nsteps == (9, 3, 4)
+    viewer.dims.current_step = (8, 0, 0)
+    np.testing.assert_array_equal(viewer.view.slicer.response(layer), longer[8])
+
+    shorter = np.arange(24).reshape(2, 3, 4)
+    layer.data = shorter
+    assert viewer.dims.current_step == (1, 0, 0)
+    np.testing.assert_array_equal(viewer.view.slicer.response(layer), shorter[1])
+
+
+@pytest.mark.filterwarnings("error")
+def test_list_given_to_the_view_behaves_like_the_default_one():
+    """Slice and fit for layers passed on construction, without warnings."""
+    layer = Image(name="a", data=np.zeros((5, 3, 4)))
+    view = View(layers=[layer])
+    assert view.dims.nsteps == (5, 3, 4)
+    assert view.slicer.response(layer) is not None
+    assert len(layer.events.data) == 1
+    view.layers.append(Image(name="b", data=np.zeros((2, 3, 4))))
+    assert len(layer.events.data) == 1
+
+
+def test_listeners_of_sliced_see_the_fitted_dims():
+    """Fit the dims before any layer is sliced again."""
+    viewer = ViewerModel()
+    viewer.layers.append(Image(name="flat", data=np.zeros((6, 7))))
+    seen = set()
+    viewer.view.slicer.sliced.connect(lambda layer: seen.add(viewer.dims.nsteps))
+    viewer.layers.append(Image(name="big", data=np.zeros((5, 3, 4))))
+    assert seen == {(5, 6, 7)}
