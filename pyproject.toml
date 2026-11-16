@@ -1,0 +1,99 @@
+[project]
+name = "napari-core"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Jacopo Abramo", email = "jacopo.abramo@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.4.6",
+    "psygnal>=0.16.1",
+    "pydantic>=2.14.3",
+    "typing-extensions>=4.16.0",
+]
+
+[project.optional-dependencies]
+vispy = [
+    "vispy>=0.17.0",
+]
+dask = [
+    "dask>=2026.8.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "dask>=2026.8.0",
+    "import-linter>=2.16",
+    "pyqt6>=6.12.1",
+    "pyrefly>=1.4.1",
+    "pyright>=1.1.414",
+    "pytest>=9.2.0",
+    "ruff>=0.17.5",
+    "vispy>=0.17.0",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "PLC0415", "E402", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D100", "D101", "D102", "D104", "D105", "D106", "D107", "D2", "D3", "D4"]
+"examples/**" = ["D100", "D101", "D102", "D104", "D105", "D106", "D107", "D2", "D3", "D4"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["tests/static"]
+markers = ["gl: needs OpenGL and a Qt binding"]
+
+[tool.pyright]
+typeCheckingMode = "strict"
+include = ["src", "tests/static"]
+reportUnnecessaryTypeIgnoreComment = "error"
+
+[tool.pyrefly]
+preset = "strict"
+project-includes = ["src", "tests/static"]
+
+[tool.importlinter]
+root_package = "napari_core"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Layers"
+type = "layers"
+layers = [
+    "napari_core.interaction",
+    "napari_core.render",
+    "napari_core.model",
+    "napari_core.data",
+    "napari_core.typing",
+]
+
+[[tool.importlinter.contracts]]
+name = "No Qt in the core"
+type = "forbidden"
+source_modules = ["napari_core"]
+forbidden_modules = ["PyQt5", "PyQt6", "PySide2", "PySide6", "qtpy"]
+
+[[tool.importlinter.contracts]]
+name = "vispy only in the vispy backend"
+type = "forbidden"
+source_modules = [
+    "napari_core.typing",
+    "napari_core.data",
+    "napari_core.model",
+    "napari_core.interaction",
+]
+forbidden_modules = ["vispy"]
