@@ -6,7 +6,13 @@ import dask.array as da
 import numpy as np
 
 from napari_core.data import as_layer_data
-from napari_core.model import ButtonEvent, Image, Layer
+from napari_core.model import ButtonEvent, Image, Layer, View
+from napari_core.render import (
+    LayerAdapter,
+    SurfaceEvent,
+    SurfaceWheelEvent,
+    register_layer_adapter,
+)
 from napari_core.typing import LayerDataProtocol
 
 uint8_array: np.ndarray[tuple[int, ...], np.dtype[np.uint8]] = np.zeros(
@@ -51,3 +57,36 @@ def register(layer: Image) -> None:
     """Add callbacks to an image, where one typed for another layer fails."""
     layer.mouse_drag_callbacks.append(on_drag)
     layer.mouse_drag_callbacks.append(on_other_drag)  # type: ignore
+
+
+class ImageAdapter:
+    """An adapter for images."""
+
+    def close(self) -> None:
+        """Release nothing."""
+
+
+def make_image_adapter(layer: Image, view: View) -> LayerAdapter:
+    """Return the adapter of an image."""
+    return ImageAdapter()
+
+
+def make_other_adapter(layer: OtherLayer, view: View) -> LayerAdapter:
+    """Return the adapter of another layer type."""
+    return ImageAdapter()
+
+
+register_layer_adapter("x", Image, make_image_adapter)
+register_layer_adapter("x", Image, make_other_adapter)  # type: ignore
+
+
+def wheel_delta(event: SurfaceEvent) -> float:
+    """Read `dy` where the event is a wheel event."""
+    match event["event_type"]:
+        case "wheel":
+            assert_type(event, SurfaceWheelEvent)
+            return event["dy"]
+        case "pointer_down" | "pointer_up" | "pointer_move" | "double_click":
+            return event["dy"]  # type: ignore
+        case _:
+            return 0.0

@@ -95,5 +95,8 @@ source_modules = [
     "napari_core.data",
     "napari_core.model",
     "napari_core.interaction",
+    "napari_core.render._events",
+    "napari_core.render._protocols",
+    "napari_core.render._registry",
 ]
 forbidden_modules = ["vispy"]
