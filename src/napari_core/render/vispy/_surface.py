@@ -145,13 +145,13 @@ class VispySurface(Generic[NativeT]):
 
     The surface lives as long as its native widget object does, whether or not
     the caller keeps the surface. Calling `close` on the surface is the
-    reliable way to release it. Dropping the widget object releases it only at
-    the next cyclic garbage collection, because the surface and the widget
-    refer to each other through the vispy canvas; until then model changes
-    still reach the widget, and if its Qt object was already deleted, vispy
-    logs an error for each. Closing the widget with its own `close()` does not
-    release it at all: a widget that is closed but still referenced keeps
-    following the model.
+    reliable way to release it, and it also deletes the widget. Dropping the
+    widget object releases it only at the next cyclic garbage collection,
+    because the surface and the widget refer to each other through the vispy
+    canvas; until then model changes still reach the widget, and if its Qt
+    object was already deleted, vispy logs an error for each. Closing the
+    widget with its own `close()` does not release it at all: a widget that is
+    closed but still referenced keeps following the model.
     """
 
     def __init__(self, view: View, parent: NativeT | None) -> None:
@@ -180,7 +180,7 @@ class VispySurface(Generic[NativeT]):
         try:
             self._sync: ViewSync | None = ViewSync(view, camera, box.scene)
         except BaseException:
-            self._canvas.close()
+            self._close_canvas()
             raise
         # vispy and psygnal hold the handlers weakly, so the widget keeps the surface.
         setattr(self._canvas.native, OWNER_ATTRIBUTE, self)
@@ -220,16 +220,26 @@ class VispySurface(Generic[NativeT]):
         return np.asarray(self._canvas.render(), dtype=np.uint8)
 
     def close(self) -> None:
-        """Close the layer adapters and the canvas."""
-        self._release()
-        self._canvas.close()
+        """Close the layer adapters and the canvas, and delete the native widget.
 
-    def _release(self) -> None:
-        if self._sync is not None:
-            self._sync.close()
-            self._sync = None
+        A Qt widget is scheduled for deletion with its `deleteLater`, so it
+        must not be used after this call. Closing again does nothing.
+        """
+        if self._sync is None:
+            return
+        self._sync.close()
+        self._sync = None
         if getattr(self._canvas.native, OWNER_ATTRIBUTE, None) is self:
             delattr(self._canvas.native, OWNER_ATTRIBUTE)
+        self._close_canvas()
+
+    def _close_canvas(self) -> None:
+        native = self._canvas.native
+        self._canvas.close()
+        # Qt must destroy the widget at a point it chooses: left to Python's
+        # cyclic collector, the destruction crashed a later canvas on show.
+        if callable(delete_later := getattr(native, "deleteLater", None)):
+            delete_later()
 
     def _emit(self, event: SurfaceEvent) -> None:
         for handler, types in self._handlers:

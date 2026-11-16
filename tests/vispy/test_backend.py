@@ -5,7 +5,8 @@ import weakref
 import numpy as np
 import numpy.typing as npt
 import pytest
-from PyQt6.QtCore import QPoint, QPointF, Qt
+from PyQt6 import sip
+from PyQt6.QtCore import QCoreApplication, QEvent, QPoint, QPointF, Qt
 from PyQt6.QtGui import QImage, QWheelEvent
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QWidget
@@ -67,8 +68,6 @@ def white_image() -> Image:
 
 def shown(viewer: ViewerModel, qapp: Application) -> RenderSurface[QWidget]:
     """Return a surface of the viewer's view, shown at 200 by 100 pixels."""
-    # Free earlier tests' canvases now: a collection during a Qt event crashed.
-    gc.collect()
     surface = VispyBackend[QWidget]().create_surface(viewer.view, None)
     viewer.view.canvas_size = (200, 100)
     surface.native.resize(200, 100)
@@ -477,6 +476,7 @@ def test_surface_works_while_only_its_widget_is_kept(qapp: Application) -> None:
     QTest.mouseRelease(native, Qt.MouseButton.LeftButton, pos=QPoint(50, 40))
     assert viewer.camera.center[1] < 25.0
     native.close()
+    native.deleteLater()
 
 
 def test_closed_surface_is_freed_and_ignores_the_model(qapp: Application) -> None:
@@ -494,7 +494,17 @@ def test_closed_surface_is_freed_and_ignores_the_model(qapp: Application) -> Non
     viewer.layers.clear()
 
 
-def test_widget_close_keeps_the_surface_until_it_is_dropped(
+def test_close_deletes_the_native_widget(qapp: Application) -> None:
+    """Have Qt delete the widget of a closed surface at its next deferred delete."""
+    surface = shown(ViewerModel(), qapp)
+    native = surface.native
+    surface.close()
+    assert not sip.isdeleted(native)
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
+    assert sip.isdeleted(native)
+
+
+def test_widget_close_keeps_the_surface_until_it_is_closed(
     qapp: Application,
 ) -> None:
     """Keep a dropped surface reacting after the widget's close, until it is closed."""
