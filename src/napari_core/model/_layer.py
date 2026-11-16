@@ -68,7 +68,16 @@ class Layer(EventedModel):
         The layer's axes line up with the last `ndim` axes of `dims`. A
         displayed axis is kept whole and any other is cut at the current step,
         or at the last step of the layer when the step is past it.
+
+        Raises
+        ------
+        ValueError
+            If the layer has more axes than `dims`.
         """
+        if self.ndim > dims.ndim:
+            raise ValueError(
+                f"layer has {self.ndim} axes, but dims has only {dims.ndim}"
+            )
         offset = dims.ndim - self.ndim
         return tuple(
             slice(None)

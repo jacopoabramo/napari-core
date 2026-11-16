@@ -39,3 +39,10 @@ COLORMAPS: Mapping[str, Colormap] = MappingProxyType(
         )
     }
 )
+
+
+def colormap_named(name: str) -> Colormap:
+    """Return the built-in colormap called `name`, or raise `ValueError`."""
+    if name not in COLORMAPS:
+        raise ValueError(f"unknown colormap {name!r}, use one of {list(COLORMAPS)}")
+    return COLORMAPS[name]

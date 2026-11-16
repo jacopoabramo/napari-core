@@ -3,7 +3,7 @@
 from psygnal import EventedModel
 from pydantic import Field, field_validator
 
-from ._colormap import COLORMAPS, Colormap
+from ._colormap import COLORMAPS, Colormap, colormap_named
 from ._config import EventedConfigDict
 
 
@@ -30,10 +30,4 @@ class IntensityAppearance(EventedModel):
     @classmethod
     def _look_up_colormap(cls, value: object) -> object:
         """Replace a colormap name with the built-in colormap of that name."""
-        if not isinstance(value, str):
-            return value
-        if value not in COLORMAPS:
-            raise ValueError(
-                f"unknown colormap {value!r}, use one of {list(COLORMAPS)}"
-            )
-        return COLORMAPS[value]
+        return colormap_named(value) if isinstance(value, str) else value

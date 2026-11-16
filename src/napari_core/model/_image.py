@@ -1,19 +1,28 @@
 """The image layer."""
 
 import operator
-from typing import Self
 
-from pydantic import Field, field_validator, model_validator
+import numpy as np
+from pydantic import Field, ValidationInfo, field_validator, model_validator
 from typing_extensions import override
 
 from napari_core.data import adapter_for, as_layer_data
 from napari_core.typing import BasicKey, LayerDataProtocol, SliceArray
 
-from ._colormap import Colormap
+from ._colormap import Colormap, colormap_named
 from ._components import IntensityAppearance, Transform
 from ._config import EventedConfigDict
 from ._dims import Dims
 from ._layer import Layer
+
+
+def _check_axes(ndim: int, transform: Transform) -> None:
+    lengths = (len(transform.scale), len(transform.translate))
+    if lengths != (ndim, ndim):
+        raise ValueError(
+            f"data has {ndim} axes, but the transform has {lengths[0]} scale "
+            f"and {lengths[1]} translate entries"
+        )
 
 
 class Image(Layer):
@@ -23,11 +32,15 @@ class Image(Layer):
     every axis of its data. Without `appearance` it gets the `gray` colormap
     and contrast limits from `reset_contrast_limits`.
 
+    An image keeps its number of axes.
+
     Raises
     ------
     ValueError
         If `transform` does not have one scale and one translation per axis
-        of `data`.
+        of `data`, whether given on construction or assigned later. Nothing is
+        stored then, and assigning data of another number of axes is refused
+        the same way.
     """
 
     model_config = EventedConfigDict(arbitrary_types_allowed=True)
@@ -37,9 +50,22 @@ class Image(Layer):
 
     @field_validator("data", mode="before")
     @classmethod
-    def _validate_data(cls, value: object) -> LayerDataProtocol:
-        """Raise `TypeError` unless `value` is layer data."""
-        return as_layer_data(value)
+    def _validate_data(cls, value: object, info: ValidationInfo) -> LayerDataProtocol:
+        """Raise `TypeError` unless `value` is layer data with the transform's axes."""
+        data = as_layer_data(value)
+        transform = info.data.get("transform")
+        if isinstance(transform, Transform):
+            _check_axes(data.ndim, transform)
+        return data
+
+    @field_validator("transform", mode="after")
+    @classmethod
+    def _validate_transform(cls, value: Transform, info: ValidationInfo) -> Transform:
+        """Raise `ValueError` unless `value` has the axes of the data."""
+        data = info.data.get("data")
+        if isinstance(data, LayerDataProtocol):
+            _check_axes(data.ndim, value)
+        return value
 
     @model_validator(mode="before")
     @classmethod
@@ -50,16 +76,6 @@ class Image(Layer):
         ndim = as_layer_data(values["data"]).ndim
         transform = Transform(scale=(1.0,) * ndim, translate=(0.0,) * ndim)
         return {**values, "transform": transform}
-
-    @model_validator(mode="after")
-    def _check_transform(self) -> Self:
-        lengths = (len(self.transform.scale), len(self.transform.translate))
-        if lengths != (self.data.ndim, self.data.ndim):
-            raise ValueError(
-                f"transform has {lengths[0]} scale and {lengths[1]} translate "
-                f"entries, but the data has {self.data.ndim} axes"
-            )
-        return self
 
     @override
     def model_post_init(self, context: object, /) -> None:
@@ -84,8 +100,10 @@ class Image(Layer):
         return self.appearance.colormap
 
     @colormap.setter
-    def colormap(self, value: Colormap) -> None:
-        self.appearance.colormap = value
+    def colormap(self, value: Colormap | str) -> None:
+        self.appearance.colormap = (
+            colormap_named(value) if isinstance(value, str) else value
+        )
 
     @property
     def contrast_limits(self) -> tuple[float, float]:
@@ -141,7 +159,11 @@ class Image(Layer):
                 for axis, steps in enumerate(self.extent_steps)
             )
         plane = adapter.materialize(self.data, key)
-        low, high = float(plane.min()), float(plane.max())
+        finite = plane[np.isfinite(plane)]
+        if finite.size == 0:
+            self.appearance.contrast_limits = (0.0, 1.0)
+            return
+        low, high = float(finite.min()), float(finite.max())
         self.appearance.contrast_limits = (low, high if high > low else low + 1.0)
 
 

@@ -1,6 +1,8 @@
+import dask.array as da
 import numpy as np
 import pytest
 
+from napari_core.data import as_layer_data
 from napari_core.model import COLORMAPS, Dims, Image, Transform
 
 
@@ -26,6 +28,9 @@ def test_shortcuts_write_through_to_components():
     layer.gamma = 0.5
     assert seen == [0.5]
     assert layer.appearance.gamma == 0.5
+
+    layer.colormap = "blue"
+    assert layer.colormap.name == "blue"
 
     changes = {
         "colormap": (COLORMAPS["red"], layer.appearance.events.colormap),
@@ -56,8 +61,15 @@ def test_assigning_equal_but_distinct_data_emits():
     layer.events.data.connect(seen.append)
     layer.data = stack()
     assert len(seen) == 1
+
+
+def test_assigning_the_same_data_does_not_emit():
+    """Stay silent when the very same array is assigned again."""
+    layer = Image(name="a", data=stack())
+    seen = []
+    layer.events.data.connect(seen.append)
     layer.data = layer.data
-    assert len(seen) == 1
+    assert seen == []
 
 
 @pytest.mark.parametrize(
@@ -101,3 +113,57 @@ def test_transform_with_the_wrong_length_is_refused():
     transform = Transform(scale=(1.0, 1.0), translate=(0.0, 0.0, 0.0))
     with pytest.raises(ValueError, match="2.*3"):
         Image(name="a", data=stack(), transform=transform)
+
+
+def test_refused_data_assignment_leaves_the_image_unchanged():
+    """Refuse data of another ndim, keep the old data and emit nothing."""
+    data = stack()
+    layer = Image(name="a", data=data)
+    seen = []
+    layer.events.data.connect(seen.append)
+    with pytest.raises(ValueError, match="2 axes.*3 scale"):
+        layer.data = np.zeros((3, 4))
+    assert layer.data is data
+    assert len(layer.scale) == 3
+    assert seen == []
+    layer.data = stack()
+    assert len(seen) == 1
+
+
+def test_refused_transform_assignment_leaves_the_image_unchanged():
+    """Refuse a transform of the wrong length and keep the old one."""
+    layer = Image(name="a", data=stack())
+    old = layer.transform
+    seen = []
+    layer.events.transform.connect(seen.append)
+    with pytest.raises(ValueError, match="3 axes.*2 scale"):
+        layer.transform = Transform(scale=(1.0, 1.0), translate=(0.0, 0.0))
+    assert layer.transform is old
+    assert seen == []
+    layer.transform = Transform(scale=(2.0,) * 3, translate=(0.0,) * 3)
+    assert len(seen) == 1
+
+
+def test_slice_key_refuses_dims_with_fewer_axes():
+    """Raise when the layer has more axes than the dims."""
+    layer = Image(name="a", data=stack())
+    with pytest.raises(ValueError, match="3.*2"):
+        layer.slice_key(Dims(ndim=2))
+
+
+def test_contrast_limits_come_from_the_finite_values():
+    """Ignore NaN when taking the limits."""
+    data = np.array([[np.nan, 2.0], [5.0, np.inf]])
+    assert Image(name="a", data=data).contrast_limits == (2.0, 5.0)
+
+
+@pytest.mark.parametrize("data", [np.full((2, 2), np.nan), np.zeros((0, 3))])
+def test_contrast_limits_fall_back_without_finite_values(data):
+    """Use (0, 1) for all-NaN or empty data, without a numpy warning."""
+    assert Image(name="a", data=data).contrast_limits == (0.0, 1.0)
+
+
+def test_lazy_data_takes_limits_from_the_middle_plane_only():
+    """Read only the middle plane of dask data for the contrast limits."""
+    data = as_layer_data(da.arange(120).reshape(2, 3, 4, 5))
+    assert Image(name="a", data=data).contrast_limits == (80.0, 99.0)
