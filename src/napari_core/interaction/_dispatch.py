@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 R = TypeVar("R")
 
-_EVENT_TYPES: tuple[SurfaceEventType, ...] = (
+EVENT_TYPES: tuple[SurfaceEventType, ...] = (
     "pointer_down",
     "pointer_up",
     "pointer_move",
@@ -41,7 +41,7 @@ _EVENT_TYPES: tuple[SurfaceEventType, ...] = (
 )
 
 
-class _Dispatcher:
+class Dispatcher:
     def __init__(self, view: View) -> None:
         self._view = view
         self._camera = CameraController(view)
@@ -146,7 +146,9 @@ class _Dispatcher:
                 self._resume_drags(event)
             case WheelEvent() if layer is not None:
                 for callback in layer.mouse_wheel_callbacks:
-                    _run(partial(callback, layer, event), _label(callback, layer))
+                    run(
+                        partial(callback, layer, event), callback_label(callback, layer)
+                    )
             case _:
                 pass
         if isinstance(event, ButtonEvent | WheelEvent):
@@ -154,9 +156,9 @@ class _Dispatcher:
 
     def _start_drags(self, layer: Layer, event: ButtonEvent) -> None:
         for callback in layer.mouse_drag_callbacks:
-            label = _label(callback, layer)
-            result = _run(partial(callback, layer, event), label)
-            if isinstance(result, Generator) and _advance(result, label):
+            label = callback_label(callback, layer)
+            result = run(partial(callback, layer, event), label)
+            if isinstance(result, Generator) and advance(result, label):
                 self._drags.append((event, result, label))
 
     def _resume_drags(self, event: ButtonEvent) -> None:
@@ -165,17 +167,17 @@ class _Dispatcher:
         for held, generator, label in drags:
             for field in fields(held):
                 setattr(held, field.name, getattr(event, field.name))
-            alive = _advance(generator, label)
+            alive = advance(generator, label)
             event.handled = event.handled or held.handled
             if alive and event.type == "mouse_move":
                 self._drags.append((held, generator, label))
 
 
-def _label(callback: object, layer: Layer) -> str:
+def callback_label(callback: object, layer: Layer) -> str:
     return f"{callback!r} of layer {layer.name!r}"
 
 
-def _run(call: Callable[[], R], label: str) -> R | None:
+def run(call: Callable[[], R], label: str) -> R | None:
     try:
         return call()
     except Exception:
@@ -183,7 +185,7 @@ def _run(call: Callable[[], R], label: str) -> R | None:
         return None
 
 
-def _advance(generator: Generator[None, None, None], label: str) -> bool:
+def advance(generator: Generator[None, None, None], label: str) -> bool:
     try:
         next(generator)
     except StopIteration:
@@ -208,8 +210,8 @@ def attach(view: View, surface: RenderSurface[object]) -> Callable[[], None]:
     A modifier name that the surface sends and that is not `Shift`,
     `Control`, `Alt` or `Meta` makes the handler raise `ValueError`.
     """
-    dispatcher = _Dispatcher(view)
-    surface.add_event_handler(dispatcher.handle, *_EVENT_TYPES)
+    dispatcher = Dispatcher(view)
+    surface.add_event_handler(dispatcher.handle, *EVENT_TYPES)
 
     def detach() -> None:
         dispatcher.active = False

@@ -16,7 +16,7 @@ from ._dims import Dims
 from ._layer import Layer
 
 
-def _check_axes(ndim: int, transform: Transform) -> None:
+def check_axes(ndim: int, transform: Transform) -> None:
     lengths = (len(transform.scale), len(transform.translate))
     if lengths != (ndim, ndim):
         raise ValueError(
@@ -68,7 +68,7 @@ class Image(Layer):
             raise ValueError(f"an image needs at least 2 axes, data has {data.ndim}")
         transform = info.data.get("transform")
         if isinstance(transform, Transform):
-            _check_axes(data.ndim, transform)
+            check_axes(data.ndim, transform)
         return data
 
     @field_validator("transform", mode="after")
@@ -77,7 +77,7 @@ class Image(Layer):
         """Raise `ValueError` unless `value` has the axes of the data."""
         data = info.data.get("data")
         if isinstance(data, LayerDataProtocol):
-            _check_axes(data.ndim, value)
+            check_axes(data.ndim, value)
         return value
 
     @model_validator(mode="before")

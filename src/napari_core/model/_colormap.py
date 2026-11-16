@@ -18,7 +18,7 @@ class Colormap(EventedModel):
     colors: npt.NDArray[np.float32]
 
 
-def _ramp(name: str, rgb: tuple[float, float, float]) -> Colormap:
+def ramp(name: str, rgb: tuple[float, float, float]) -> Colormap:
     levels = np.linspace(0, 1, 256, dtype=np.float32)[:, np.newaxis]
     colors = np.concatenate(
         [levels * np.asarray(rgb, dtype=np.float32), np.ones_like(levels)], axis=1
@@ -31,11 +31,11 @@ COLORMAPS: Mapping[str, Colormap] = MappingProxyType(
     {
         cm.name: cm
         for cm in (
-            _ramp("gray", (1, 1, 1)),
-            _ramp("red", (1, 0, 0)),
-            _ramp("green", (0, 1, 0)),
-            _ramp("blue", (0, 0, 1)),
-            _ramp("magenta", (1, 0, 1)),
+            ramp("gray", (1, 1, 1)),
+            ramp("red", (1, 0, 0)),
+            ramp("green", (0, 1, 0)),
+            ramp("blue", (0, 0, 1)),
+            ramp("magenta", (1, 0, 1)),
         )
     }
 )

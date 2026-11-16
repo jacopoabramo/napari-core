@@ -3,6 +3,7 @@
 from ._camera import Camera
 from ._colormap import COLORMAPS, Colormap
 from ._components import IntensityAppearance, Transform
+from ._config import EventedConfigDict
 from ._dims import Dims
 from ._image import Image
 from ._input import (
@@ -30,6 +31,7 @@ __all__ = [
     "Colormap",
     "Dims",
     "EnterLeaveEvent",
+    "EventedConfigDict",
     "Image",
     "InputEvent",
     "IntensityAppearance",

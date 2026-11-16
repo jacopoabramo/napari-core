@@ -14,7 +14,7 @@ from ._layer import Layer
 from ._slicer import Slicer
 
 
-def _layer_list(layers: Iterable[object] = ()) -> EventedList[Layer]:
+def layer_list(layers: Iterable[object] = ()) -> EventedList[Layer]:
     """Return a list of layers that does not re-emit the layers' events.
 
     Raises
@@ -52,8 +52,8 @@ class View(EventedModel):
     dims: Dims = Field(default_factory=Dims, frozen=True)
     camera: Camera = Field(default_factory=Camera, frozen=True)
     canvas_size: tuple[int, int] = (640, 480)
-    layers: Annotated[EventedList[Layer], PlainValidator(_layer_list)] = Field(
-        default_factory=_layer_list, frozen=True
+    layers: Annotated[EventedList[Layer], PlainValidator(layer_list)] = Field(
+        default_factory=layer_list, frozen=True
     )
 
     _slicer: Slicer = PrivateAttr()

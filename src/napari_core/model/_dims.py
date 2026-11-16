@@ -8,7 +8,7 @@ from pydantic import Field, model_validator
 from ._config import EventedConfigDict
 
 
-def _fit(values: tuple[int, ...], size: int, fill: int) -> tuple[int, ...]:
+def fit(values: tuple[int, ...], size: int, fill: int) -> tuple[int, ...]:
     return (fill,) * (size - len(values)) + values[max(len(values) - size, 0) :]
 
 
@@ -43,11 +43,11 @@ class Dims(EventedModel):
 
     @model_validator(mode="after")
     def _make_consistent(self) -> Self:
-        nsteps = _fit(self.nsteps, self.ndim, 1)
+        nsteps = fit(self.nsteps, self.ndim, 1)
         current_step = tuple(
             max(0, min(step, n - 1))
             for step, n in zip(
-                _fit(self.current_step, self.ndim, 0), nsteps, strict=True
+                fit(self.current_step, self.ndim, 0), nsteps, strict=True
             )
         )
         object.__setattr__(self, "nsteps", nsteps)

@@ -11,7 +11,7 @@ from ._dims import Dims
 from ._layer import Layer
 
 
-class _Follower:
+class Follower:
     """The slice of one layer, and the connection that refreshes it.
 
     The layer's `data` signal holds the connection to a bound method weakly,
@@ -45,7 +45,7 @@ class Slicer:
     def __init__(self, dims: Dims, layers: Sequence[Layer]) -> None:
         self._dims = dims
         self._layers = layers
-        self._followers: dict[int, _Follower] = {}
+        self._followers: dict[int, Follower] = {}
         self._fitting = False
         dims.events.current_step.connect(self._on_step)
 
@@ -66,7 +66,7 @@ class Slicer:
         self._fit()
         for key, layer in present.items():
             if key not in self._followers:
-                self._followers[key] = _Follower(layer, self._on_data)
+                self._followers[key] = Follower(layer, self._on_data)
                 self._slice(layer)
 
     def _on_data(self, layer: Layer) -> None:
