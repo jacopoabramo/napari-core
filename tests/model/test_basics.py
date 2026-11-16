@@ -56,3 +56,13 @@ def test_colormap_assignment_with_equal_colors_does_not_emit():
     appearance.events.colormap.connect(seen.append)
     appearance.colormap = Colormap(name="gray", colors=COLORMAPS["gray"].colors.copy())
     assert seen == []
+
+
+def test_camera_center_event_carries_the_stored_tuple():
+    """Emit the stored tuple of floats when a center is assigned as integers."""
+    camera = Camera()
+    seen = []
+    camera.events.center.connect(seen.append)
+    camera.center = (1, 2)
+    assert seen == [(1.0, 2.0)]
+    assert all(isinstance(value, float) for value in seen[0])

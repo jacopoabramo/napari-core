@@ -18,6 +18,10 @@ class Dims(EventedModel):
     `nsteps` and `current_step` always have one entry per axis. Growing `ndim`
     pads them on the left, shrinking it drops entries from the left, and
     `current_step` is clamped to each axis.
+
+    Set `ndim` first. A tuple of another length assigned to `nsteps` or
+    `current_step` is fitted to `ndim` the same way, by padding or dropping
+    entries on the left, without an error.
     """
 
     model_config = EventedConfigDict(

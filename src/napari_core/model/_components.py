@@ -1,7 +1,7 @@
 """Models that describe how a layer is placed and drawn."""
 
 from psygnal import EventedModel
-from pydantic import field_validator
+from pydantic import Field, field_validator
 
 from ._colormap import COLORMAPS, Colormap
 from ._config import EventedConfigDict
@@ -22,7 +22,7 @@ class IntensityAppearance(EventedModel):
         field_dependencies={"colormap": ["colormap"]},
     )
 
-    colormap: Colormap = COLORMAPS["gray"]
+    colormap: Colormap = Field(default_factory=lambda: COLORMAPS["gray"])
     contrast_limits: tuple[float, float] = (0.0, 1.0)
     gamma: float = 1.0
 

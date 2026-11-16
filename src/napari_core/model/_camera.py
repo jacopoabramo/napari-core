@@ -1,7 +1,9 @@
 """The camera model."""
 
 from psygnal import EventedModel
-from pydantic import ConfigDict, Field
+from pydantic import Field
+
+from ._config import EventedConfigDict
 
 
 class Camera(EventedModel):
@@ -15,7 +17,10 @@ class Camera(EventedModel):
         Surface pixels per world unit.
     """
 
-    model_config = ConfigDict(validate_assignment=True)
+    model_config = EventedConfigDict(
+        validate_assignment=True,
+        field_dependencies={"center": ["center"], "zoom": ["zoom"]},
+    )
 
     center: tuple[float, float] = (0.0, 0.0)
     zoom: float = Field(default=1.0, gt=0)
