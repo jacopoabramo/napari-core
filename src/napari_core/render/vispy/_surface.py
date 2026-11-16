@@ -2,6 +2,7 @@
 
 # pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 
+import logging
 from collections.abc import Callable
 from typing import Generic, Literal, Protocol, TypeVar, cast, runtime_checkable
 
@@ -22,6 +23,8 @@ from napari_core.render import (
 )
 
 from ._image import BACKEND_NAME
+
+logger = logging.getLogger(__name__)
 
 NativeT = TypeVar("NativeT")
 
@@ -53,6 +56,10 @@ class ViewSync:
         self._camera = camera
         self._scene = scene
         self._adapters: dict[int, VispyLayerAdapter] = {}
+        self._undrawable: set[int] = set()
+        for layer in view.layers:
+            if id(layer) not in self._adapters:
+                self._adapters[id(layer)] = self._make_adapter(layer)
         view.camera.events.center.connect(self.update_camera)
         view.camera.events.zoom.connect(self.update_camera)
         view.events.canvas_size.connect(self.update_camera)
@@ -63,7 +70,6 @@ class ViewSync:
         ):
             signal.connect(self.sync_layers)
         self.update_camera()
-        self.sync_layers()
 
     def update_camera(self) -> None:
         """Show the world rectangle the model camera sees, rows downwards."""
@@ -81,13 +87,24 @@ class ViewSync:
         )
 
     def sync_layers(self) -> None:
-        """Close the adapters of removed layers and make those of new ones."""
+        """Close the adapters of removed layers and make those of new ones.
+
+        A new layer that gets no adapter is logged once and drawn as nothing.
+        """
         present = {id(layer): layer for layer in self._view.layers}
         for key in self._adapters.keys() - present.keys():
             self._adapters.pop(key).close()
+        self._undrawable &= present.keys()
         for key, layer in present.items():
-            if key not in self._adapters:
+            if key in self._adapters or key in self._undrawable:
+                continue
+            try:
                 self._adapters[key] = self._make_adapter(layer)
+            except Exception:
+                self._undrawable.add(key)
+                logger.exception(
+                    "cannot draw layer %r of type %s", layer.name, type(layer).__name__
+                )
 
     def _make_adapter(self, layer: Layer) -> VispyLayerAdapter:
         adapter = create_layer_adapter(BACKEND_NAME, layer, self._view)
@@ -121,6 +138,10 @@ class VispySurface(Generic[NativeT]):
     Vispy drops a pointer move that arrives within 10 ms of the previous one,
     so the last position of a fast burst may not be reported. Layers are drawn
     in the order they were added, not in list order after a reorder.
+
+    A layer that the backend cannot draw makes the constructor raise, with the
+    canvas closed, when it is in the view already. One that joins the list
+    later is logged once with `logging.exception` and drawn as nothing.
 
     The surface lives as long as its native widget object does, whether or not
     the caller keeps the surface. Calling `close` on the surface
@@ -199,7 +220,7 @@ class VispySurface(Generic[NativeT]):
         self._release()
         self._canvas.close()
 
-    def _release(self, _event: object = None) -> None:
+    def _release(self) -> None:
         if self._sync is not None:
             self._sync.close()
             self._sync = None

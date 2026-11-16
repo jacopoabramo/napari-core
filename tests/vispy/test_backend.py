@@ -32,6 +32,30 @@ RED = (255, 0, 0)
 BLUE = (0, 0, 255)
 
 
+class Undrawable(Layer):
+    """A layer type that the vispy backend has no adapter for."""
+
+    data: int = 0
+
+    @property
+    def ndim(self) -> int:
+        return 2
+
+    @property
+    def extent_steps(self) -> tuple[int, ...]:
+        return (2, 2)
+
+    def slice(self, dims: object) -> npt.NDArray[np.uint8]:
+        return np.zeros((2, 2), dtype=np.uint8)
+
+
+def undrawable() -> Undrawable:
+    """Return a layer of a type the vispy backend cannot draw."""
+    return Undrawable(
+        name="p", transform=Transform(scale=(1.0, 1.0), translate=(0.0, 0.0))
+    )
+
+
 def white_image() -> Image:
     """Return a 50 by 50 image whose pixels all map to white."""
     return Image(
@@ -292,33 +316,38 @@ def test_failed_surface_closes_its_canvas_and_logs_no_error(
             closed.append(self)
             super().close()
 
-    class Plain(Layer):
-        data: int = 0
-
-        @property
-        def ndim(self) -> int:
-            return 2
-
-        @property
-        def extent_steps(self) -> tuple[int, ...]:
-            return (2, 2)
-
-        def slice(self, dims: object) -> npt.NDArray[np.uint8]:
-            return np.zeros((2, 2), dtype=np.uint8)
-
     monkeypatch.setattr(
         "napari_core.render.vispy._surface.SceneCanvas", RecordingCanvas
     )
     viewer = ViewerModel()
-    viewer.layers.append(
-        Plain(name="p", transform=Transform(scale=(1.0, 1.0), translate=(0.0, 0.0)))
-    )
+    viewer.layers.append(undrawable())
     caplog.set_level(logging.ERROR)
     caplog.set_level(logging.ERROR, logger="vispy")
     with pytest.raises(LookupError):
         VispyBackend[QWidget]().create_surface(viewer.view, None)
     assert len(closed) == 1
     assert not caplog.records
+
+
+def test_undrawable_layer_appended_later_is_logged_and_skipped(
+    qapp: Application, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Log a later undrawable layer once and keep drawing the others."""
+    viewer = ViewerModel()
+    viewer.camera.center = (25.0, 25.0)
+    surface = shown(viewer, qapp)
+    caplog.set_level(logging.ERROR, logger="napari_core")
+    layer = undrawable()
+    viewer.layers.append(layer)
+    viewer.layers.append(white_image())
+    qapp.process_events()
+    assert middle(surface.screenshot()) == WHITE
+    (record,) = caplog.records
+    assert "'p'" in record.getMessage() and "Undrawable" in record.getMessage()
+    assert record.exc_info is not None
+    viewer.layers.remove(layer)
+    assert len(caplog.records) == 1
+    surface.close()
 
 
 def test_equal_replacement_appearance_is_followed_and_the_old_one_is_not(
