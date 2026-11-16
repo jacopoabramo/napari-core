@@ -31,12 +31,15 @@
 #   request 34, and HasGetItem follows pull request 69 (both open when
 #   written).
 #
-# Deliberate differences from the pull requests:
+# Deliberate differences from array-api-typing:
 #
 # - shape and size hold int only. The pull requests allow None for unknown
 #   dimensions, which layer data never has.
-# - __getitem__ returns object. The pull request returns Self, which a Dask
-#   array or a view of one would not satisfy for every key.
+# - __getitem__ returns object. The pull request returns Self, which a zarr
+#   array does not satisfy, because indexing it returns a NumPy array.
+# - DTypeT_co has a default, np.dtype[np.generic], which array-api-typing's
+#   type variable lacks, so that the bare protocol name means an array with
+#   a NumPy dtype.
 
 from typing import Protocol
 

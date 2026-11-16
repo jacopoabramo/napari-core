@@ -36,7 +36,8 @@ class CanvasEvent(InputEvent):
     pos
         Position on the canvas in pixels, `(x, y)`.
     viewbox
-        Size of the canvas in pixels, `(width, height)`.
+        The cell of the grid of views under the pointer. There is one view
+        and no grid, so it is always `(0, 0)`.
     """
 
     view: "View"

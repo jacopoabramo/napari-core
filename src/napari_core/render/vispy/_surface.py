@@ -144,10 +144,14 @@ class VispySurface(Generic[NativeT]):
     later is logged once with `logging.exception` and drawn as nothing.
 
     The surface lives as long as its native widget object does, whether or not
-    the caller keeps the surface. Calling `close` on the surface
-    releases it, and so does dropping the widget object. Closing the widget
-    with its own `close()` does not: a widget that is closed but still
-    referenced keeps following the model.
+    the caller keeps the surface. Calling `close` on the surface is the
+    reliable way to release it. Dropping the widget object releases it only at
+    the next cyclic garbage collection, because the surface and the widget
+    refer to each other through the vispy canvas; until then model changes
+    still reach the widget, and if its Qt object was already deleted, vispy
+    logs an error for each. Closing the widget with its own `close()` does not
+    release it at all: a widget that is closed but still referenced keeps
+    following the model.
     """
 
     def __init__(self, view: View, parent: NativeT | None) -> None:

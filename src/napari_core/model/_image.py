@@ -49,8 +49,12 @@ class Image(Layer):
     ValueError
         If `data` has fewer than 2 axes, or `transform` does not have one
         scale and one translation per axis of `data`, whether given on
-        construction or assigned later. Nothing is stored then, and assigning
-        data of another number of axes is refused the same way.
+        construction or assigned later. pydantic reports it as its
+        `ValidationError`, a subclass of `ValueError`. Nothing is stored then,
+        and assigning data of another number of axes is refused the same way.
+    TypeError
+        If `data` is not layer data, from
+        [`as_layer_data`][napari_core.data.as_layer_data], unchanged.
     """
 
     model_config = EventedConfigDict(arbitrary_types_allowed=True)

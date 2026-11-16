@@ -5,10 +5,10 @@ import weakref
 import numpy as np
 import numpy.typing as npt
 import pytest
-from PyQt6.QtCore import QPoint, Qt
-from PyQt6.QtGui import QImage
+from PyQt6.QtCore import QPoint, QPointF, Qt
+from PyQt6.QtGui import QImage, QWheelEvent
 from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtWidgets import QApplication, QWidget
 from vispy.app import Application
 from vispy.scene import SceneCanvas
 
@@ -211,6 +211,61 @@ def test_image_orientation_and_pixel_centres(qapp: Application) -> None:
     assert not bright(69, 30) and not bright(91, 30)
     assert not bright(80, 19) and not bright(80, 41)
     assert not bright(120, 30) and not bright(80, 70) and not bright(120, 70)
+    surface.close()
+
+
+def turn_wheel_away(native: QWidget, notches: int) -> None:
+    """Send `native` a wheel event of `notches` turned away from the user."""
+    centre = QPointF(100.0, 50.0)
+    event = QWheelEvent(
+        centre,
+        QPointF(native.mapToGlobal(centre)),
+        QPoint(0, 0),
+        QPoint(0, 120 * notches),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    QApplication.sendEvent(native, event)
+
+
+def test_wheel_away_from_the_user_zooms_in(qapp: Application) -> None:
+    """Report a wheel notch away from the user as dy of -120, which zooms in."""
+    viewer = ViewerModel()
+    surface = shown(viewer, qapp)
+    seen: list[SurfaceEvent] = []
+    surface.add_event_handler(seen.append, "wheel")
+    attach(viewer.view, surface)
+    turn_wheel_away(surface.native, 2)
+    (event,) = seen
+    assert event["event_type"] == "wheel"
+    assert (event["dx"], event["dy"]) == (0.0, -240.0)
+    assert viewer.camera.zoom == pytest.approx(1.1**2.4)
+    surface.close()
+
+
+def test_resize_of_the_widget_writes_the_canvas_size(qapp: Application) -> None:
+    """Write the widget's new logical size into the view of an attached surface."""
+    viewer = ViewerModel()
+    surface = shown(viewer, qapp)
+    attach(viewer.view, surface)
+    surface.native.resize(300, 150)
+    qapp.process_events()
+    assert viewer.view.canvas_size == (300, 150)
+    surface.close()
+
+
+def test_unattached_surface_keeps_the_default_canvas_size(qapp: Application) -> None:
+    """Leave the view's canvas size alone when no dispatcher is attached."""
+    viewer = ViewerModel()
+    default = viewer.view.canvas_size
+    surface = VispyBackend[QWidget]().create_surface(viewer.view, None)
+    surface.native.resize(300, 150)
+    surface.native.show()
+    qapp.process_events()
+    assert surface.get_logical_size() == (300.0, 150.0)
+    assert viewer.view.canvas_size == default
     surface.close()
 
 
@@ -440,16 +495,23 @@ def test_closed_surface_is_freed_and_ignores_the_model(qapp: Application) -> Non
 def test_widget_close_keeps_the_surface_until_it_is_dropped(
     qapp: Application,
 ) -> None:
-    """Close the widget, then the surface twice, then free it with the widget."""
+    """Keep a dropped surface reacting after the widget's close, until it is closed."""
     viewer = ViewerModel()
     viewer.layers.append(white_image())
+    viewer.camera.center = (25.0, 25.0)
     surface = shown(viewer, qapp)
     native = surface.native
     reference = weakref.ref(surface)
     native.close()
+    del surface
+    gc.collect()
+    kept = reference()
+    assert kept is not None
+    assert middle(kept.screenshot()) != BACKGROUND
     viewer.camera.center = (10_000.0, 10_000.0)
-    surface.close()
-    surface.close()
-    del surface, native
+    assert middle(kept.screenshot()) == BACKGROUND
+    kept.close()
+    kept.close()
+    del kept, native
     gc.collect()
     assert reference() is None

@@ -14,6 +14,7 @@ import dask.array as da
 import numpy as np
 import numpy.typing as npt
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QCloseEvent
 from PyQt6.QtWidgets import QApplication, QMainWindow, QSlider, QVBoxLayout, QWidget
 from vispy.app import use_app
 
@@ -61,6 +62,11 @@ class ImageWindow(QMainWindow):
     def set_plane(self, plane: int) -> None:
         """Show plane `plane` of the stack."""
         self.viewer.dims.current_step = (plane, 0, 0)
+
+    def closeEvent(self, event: QCloseEvent | None) -> None:
+        """Close the surface, so it stops following the model, then the window."""
+        self.surface.close()
+        super().closeEvent(event)
 
 
 def main() -> None:
