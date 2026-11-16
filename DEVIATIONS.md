@@ -769,8 +769,10 @@ object, and psygnal does the same. A surface that nothing else held was freed,
 leaving a window that kept its first picture and responded to nothing. The
 surface therefore sets a reference to itself as an attribute of its native
 widget, so it lives as long as the widget object does, whether or not the
-caller keeps it. `surface.close()` is the reliable way to release it.
-Dropping the widget object releases it only at the next cyclic garbage
+caller keeps it. `surface.close()` is the reliable way to release it: it
+closes the adapters and the canvas, and schedules the widget for deletion
+with the widget's own `deleteLater()`, so the widget must not be used
+afterwards. Dropping the widget object releases it only at the next cyclic garbage
 collection, because the surface and the widget refer to each other through
 the vispy canvas; until then model changes still reach the widget, and if its
 Qt object was already deleted, vispy logs an error for each. Closing the
@@ -779,6 +781,19 @@ does not pass a widget's close event on to the canvas, and a hook of the
 surface's own would need Qt in the core, which the dependency rules of
 section 2 forbid. A widget that is closed but still referenced keeps
 following the model.
+
+The deletion in `close()` is there because of a crash. A vispy canvas and its
+Qt widget refer to each other, so a closed canvas whose widget has no Qt
+parent used to be destroyed only when Python's cyclic garbage collector ran.
+With vispy 0.17.0 and PyQt6 6.12 on the development machine, the test suite
+then crashed the process with an access violation while showing a new canvas,
+in about half of the runs. Since `close()` hands the widget to Qt for
+deletion, eleven runs of the suite in a row passed. The cause inside Qt, vispy
+or the graphics driver was not found, so this is a fix that was observed to
+work and not one that is understood. Two things stay open. The widget of a
+surface that is dropped without `close()` is still destroyed by the collector.
+vispy's widget also owns a second OpenGL context and an offscreen surface that
+have no Qt parent, and the collector still destroys those.
 
 The front end therefore has to call `surface.close()` when it closes the
 window that hosts the surface. The example does this in the `closeEvent` of
