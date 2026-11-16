@@ -6,7 +6,7 @@ is written to it. The prototype shows one layer type, `Image`, in two
 dimensions, slices it synchronously from an array of any number of dimensions,
 and draws it with one backend, vispy. This file lists each place where the
 code differs from the target's rules (section 1), its package map (section 2)
-and its interfaces (sections 3.1 to 3.5), and each place where the target says
+and its interfaces (sections 3.1 to 3.6), and each place where the target says
 nothing and the prototype had to decide. Each entry says what the target says,
 what the code does and why, and ends with a recommendation: change the target,
 change the prototype later, or change neither.
@@ -312,9 +312,10 @@ does the same check and returns its argument typed as layer data, so typed
 code starts from the value it returns. It also checks what a member check
 cannot: that `dtype` is a NumPy dtype and that every entry of `shape` is a
 Python `int`, where a `bool` is refused although it is a subclass of `int`.
-It raises `TypeError` in every case. `Image` calls it on construction and in
-the validator of its `data` field, and its `TypeError` reaches the caller
-unchanged in both cases, because pydantic turns a `ValueError` raised in a
+It raises `TypeError` in every case. `Image` calls it when it is built and again
+in the validator of its `data` field, which also runs on every assignment.
+Its `TypeError` reaches the caller unchanged on construction and on
+assignment, because pydantic turns a `ValueError` raised in a
 validator into its `ValidationError` but lets a `TypeError` through.
 
 Recommendation: change the target to a function that returns the checked
@@ -487,10 +488,12 @@ when no finite value is left, and widens the range to `(low, low + 1.0)` when
 all values are equal. A constant image of 255 therefore gets `(255.0, 256.0)`
 and is drawn black.
 
-Two values are refused because a backend cannot draw them. `gamma` must be
-above 0, and a layer's `opacity` must be within 0 to 1 inclusive. A value
-outside raises pydantic's `ValidationError` and keeps the old value, whether
-it is assigned to the appearance or through the `gamma` property of `Image`.
+Two values have a range. `gamma` must be above 0, because vispy fails on any
+other value, and a layer's `opacity` must be within 0 to 1 inclusive, although
+vispy was not found to fail outside it. A value outside either range raises
+pydantic's `ValidationError` on construction and on assignment, and an
+assignment keeps the old value. For `gamma` this holds whether it is assigned
+to the appearance or through the `gamma` property of `Image`.
 
 Recommendation: change the target to say where default contrast limits come
 from for lazy data. Change the prototype later to compute the in-memory case
@@ -670,9 +673,9 @@ who assigned the value as psygnal's `EmitLoopError`, with the original error
 as its cause, after the value is already stored. To keep this from
 happening, the model refuses the values the vispy backend was found to fail
 on (an image with fewer than two axes, a gamma that is not above 0, and a
-scale or translation whose length is not the image's number of axes), and an
-opacity outside 0 to 1 as well; the section 3.2 entries above give the
-details. Each refusal happens before anything is stored.
+scale or translation with fewer than two entries). It refuses more than that:
+any scale or translation whose length is not the image's number of axes, and
+an opacity outside 0 to 1. The section 3.2 entries above give the details. Each refusal happens before anything is stored.
 
 Recommendation: change the target. The model should validate what every
 backend needs, so that no backend fails on those values, and the
@@ -718,7 +721,9 @@ that is not attached therefore leaves the view at its default size.
 `interaction` reads `canvas_size` to convert surface pixels into world
 coordinates, and the vispy surface reads it to set its own camera, so an
 unattached surface draws with the default `(640, 480)` and its picture is
-scaled wrongly until `attach` has written the real size.
+scaled wrongly until `attach` has written the real size, unless the widget
+happens to be 640 by 480 logical pixels or the caller writes `canvas_size`
+itself.
 
 Recommendation: change the target to say which package writes the canvas size
 back, or make it part of attaching a surface.
@@ -750,8 +755,9 @@ does not reorder its visuals; vispy is not the cause.
 Backends may also differ in what a move event carries. During a drag, vispy
 puts the pressed button on every move event, so the vispy surface emits
 `pointer_move` with `button` 1 while the left button is held, and 0 for a
-move with no button pressed. rendercanvas's Qt backend reports the button Qt
-gives for a move, and whether that agrees with vispy was not checked.
+move with no button pressed. rendercanvas's Qt backend was not checked. Qt
+itself reports no button on a move event, so a backend that passes Qt's value
+on would report 0 during a drag.
 
 Recommendation: change neither for the event types, which the target already
 asks for. The target's statement that a backend fills in missing events from
@@ -959,6 +965,14 @@ from showing what it was built to show.
 - The camera controller repeats the conversion from surface to world
   coordinates instead of calling `surface_to_world`, and the vispy surface
   computes the same mapping again (section 2).
+- When a view already holds a drawable layer followed by one the vispy
+  backend cannot draw, creating the surface raises without closing the adapter
+  already made for the first layer. It stays connected to the model until the
+  half-built surface is freed.
+- For a layer that joins the list later, the vispy surface logs and skips on
+  any error from making its adapter, so a bug in the adapter of a drawable
+  layer is logged and the layer is not drawn, while the same bug raises when
+  the surface is created.
 - The tests need vispy, PyQt6 and dask installed. The vispy tests are skipped
   only when vispy cannot use its PyQt6 backend. When a library is missing,
   the modules that import it fail at collection instead, because their
