@@ -1,10 +1,10 @@
 [project]
 name = "napari-core"
 version = "0.1.0"
-description = "Add your description here"
+description = "Prototype of a core library for napari-like viewers"
 readme = "README.md"
 authors = [
-    { name = "Jacopo Abramo", email = "jacopo.abramo@gmail.com" }
+    { name = "Jacopo Abramo" }
 ]
 requires-python = ">=3.11"
 dependencies = [

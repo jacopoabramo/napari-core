@@ -8,7 +8,7 @@ napari, and it is not released.
 
 ```
 uv sync --all-extras
-uv run python examples/image_slice.py
+uv run python examples/show_image.py
 ```
 
 The example needs an OpenGL driver and a Qt binding (PyQt6 is in the
