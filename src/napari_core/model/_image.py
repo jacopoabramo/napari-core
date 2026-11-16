@@ -25,6 +25,12 @@ def _check_axes(ndim: int, transform: Transform) -> None:
         )
 
 
+def check_entries(ndim: int, name: str, value: tuple[float, ...]) -> None:
+    """Raise `ValueError` unless `value` has one entry per axis."""
+    if len(value) != ndim:
+        raise ValueError(f"data has {ndim} axes, but {name} has {len(value)} entries")
+
+
 class Image(Layer):
     """A layer that shows array data as intensities through a colormap.
 
@@ -32,15 +38,19 @@ class Image(Layer):
     every axis of its data. Without `appearance` it gets the `gray` colormap
     and contrast limits from `reset_contrast_limits`.
 
-    An image keeps its number of axes.
+    An image has at least 2 axes and keeps their number. The `scale` and
+    `translate` properties are the checked way to change one of the two:
+    they refuse a tuple whose length is not the number of axes. Assigning to
+    `transform.scale` or `transform.translate` directly is refused only when
+    the lengths of the two then differ.
 
     Raises
     ------
     ValueError
-        If `transform` does not have one scale and one translation per axis
-        of `data`, whether given on construction or assigned later. Nothing is
-        stored then, and assigning data of another number of axes is refused
-        the same way.
+        If `data` has fewer than 2 axes, or `transform` does not have one
+        scale and one translation per axis of `data`, whether given on
+        construction or assigned later. Nothing is stored then, and assigning
+        data of another number of axes is refused the same way.
     """
 
     model_config = EventedConfigDict(arbitrary_types_allowed=True)
@@ -52,8 +62,10 @@ class Image(Layer):
     @field_validator("data", mode="before")
     @classmethod
     def _validate_data(cls, value: object, info: ValidationInfo) -> LayerDataProtocol:
-        """Raise `TypeError` unless `value` is layer data with the transform's axes."""
+        """Return `value` as layer data with at least 2 axes and the transform's."""
         data = as_layer_data(value)
+        if data.ndim < 2:
+            raise ValueError(f"an image needs at least 2 axes, data has {data.ndim}")
         transform = info.data.get("transform")
         if isinstance(transform, Transform):
             _check_axes(data.ndim, transform)
@@ -131,6 +143,7 @@ class Image(Layer):
 
     @scale.setter
     def scale(self, value: tuple[float, ...]) -> None:
+        check_entries(self.ndim, "scale", value)
         self.transform.scale = value
 
     @property
@@ -140,6 +153,7 @@ class Image(Layer):
 
     @translate.setter
     def translate(self, value: tuple[float, ...]) -> None:
+        check_entries(self.ndim, "translate", value)
         self.transform.translate = value
 
     def slice(self, dims: Dims) -> SliceArray:

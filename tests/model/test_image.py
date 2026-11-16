@@ -113,8 +113,8 @@ def test_callbacks_are_kept_per_layer():
 
 def test_transform_with_the_wrong_length_is_refused():
     """Name both lengths when a transform does not match the data's axes."""
-    transform = Transform(scale=(1.0, 1.0), translate=(0.0, 0.0, 0.0))
-    with pytest.raises(ValueError, match="2.*3"):
+    transform = Transform(scale=(1.0, 1.0), translate=(0.0, 0.0))
+    with pytest.raises(ValueError, match="3 axes.*2 scale and 2 translate"):
         Image(name="a", data=stack(), transform=transform)
 
 
@@ -145,6 +145,59 @@ def test_refused_transform_assignment_leaves_the_image_unchanged():
     assert seen == []
     layer.transform = Transform(scale=(2.0,) * 3, translate=(0.0,) * 3)
     assert len(seen) == 1
+
+
+@pytest.mark.parametrize("data", [np.zeros(()), np.zeros(3)])
+def test_image_with_fewer_than_two_axes_is_refused(data):
+    """Refuse data of 0 or 1 axes on construction, naming the number found."""
+    with pytest.raises(ValueError, match=f"at least 2 axes, data has {data.ndim}"):
+        Image(name="a", data=data)
+
+
+def test_assigning_data_with_one_axis_is_refused():
+    """Refuse 1-D data on assignment, keep the old data and emit nothing."""
+    data = np.zeros((3, 4))
+    layer = Image(name="a", data=data)
+    seen = []
+    layer.events.data.connect(seen.append)
+    with pytest.raises(ValueError, match="at least 2 axes, data has 1"):
+        layer.data = np.zeros(3)
+    assert layer.data is data
+    assert seen == []
+
+
+def test_gamma_shortcut_refuses_a_value_that_is_not_positive():
+    """Refuse a gamma of zero or less through the shortcut and keep the old one."""
+    layer = Image(name="a", data=stack())
+    with pytest.raises(ValueError, match="gamma"):
+        layer.gamma = -1.0
+    assert layer.gamma == 1.0
+
+
+@pytest.mark.parametrize("opacity", [-0.1, 1.1])
+def test_opacity_outside_zero_to_one_is_refused(opacity):
+    """Refuse an opacity outside 0 to 1, on construction and on assignment."""
+    with pytest.raises(ValueError, match="opacity"):
+        Image(name="a", data=stack(), opacity=opacity)
+    layer = Image(name="a", data=stack(), opacity=0.5)
+    with pytest.raises(ValueError, match="opacity"):
+        layer.opacity = opacity
+    assert layer.opacity == 0.5
+    layer.opacity = 0.0
+    layer.opacity = 1.0
+
+
+@pytest.mark.parametrize("name", ["scale", "translate"])
+def test_shortcut_refuses_a_length_other_than_the_number_of_axes(name):
+    """Name both numbers, store nothing and emit nothing for a wrong length."""
+    layer = Image(name="a", data=stack())
+    before = layer.transform.model_copy()
+    seen = []
+    layer.transform.events.connect(seen.append)
+    with pytest.raises(ValueError, match="3 axes.*1 entries"):
+        setattr(layer, name, (2.0,))
+    assert layer.transform == before
+    assert seen == []
 
 
 def test_slice_key_refuses_dims_with_fewer_axes():

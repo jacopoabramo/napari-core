@@ -6,7 +6,7 @@ from types import UnionType
 from typing import Annotated, ClassVar, Self, Union, get_args, get_origin
 
 from psygnal import EventedModel
-from pydantic import PrivateAttr
+from pydantic import Field, PrivateAttr
 
 from napari_core.typing import BasicKey, SliceArray
 
@@ -80,6 +80,8 @@ class Layer(EventedModel, metaclass=LayerMeta):
     by its contents, since it is changed in place rather than replaced. A
     class names further fields that behave so in `compared_by_identity`, which
     adds to the names of its bases.
+
+    `opacity` must be within 0 to 1 inclusive.
     """
 
     model_config = EventedConfigDict(
@@ -93,7 +95,7 @@ class Layer(EventedModel, metaclass=LayerMeta):
 
     name: str
     visible: bool = True
-    opacity: float = 1.0
+    opacity: float = Field(default=1.0, ge=0, le=1)
     transform: Transform
 
     compared_by_identity: ClassVar[tuple[str, ...]] = ()

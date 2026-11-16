@@ -24,6 +24,22 @@ def test_rejects_dask_array_with_unknown_sizes():
         as_layer_data(array[array > 3])
 
 
+class BoolShaped:
+    dtype = np.dtype(np.uint8)
+    ndim = 2
+    shape = (True, 3)
+    size = 3
+
+    def __getitem__(self, key: object) -> object:
+        return self
+
+
+def test_rejects_a_bool_in_the_shape():
+    """Refuse a shape entry that is a bool, although bool is a subclass of int."""
+    with pytest.raises(TypeError, match="integers"):
+        as_layer_data(BoolShaped())
+
+
 def test_accepts_dask_array_with_known_sizes():
     """Accept a dask array whose shape is known."""
     array = da.zeros((4, 5, 6), chunks=(1, 5, 6))

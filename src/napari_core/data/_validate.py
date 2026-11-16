@@ -17,7 +17,7 @@ def check_values(dtype: object, shape: Sequence[object]) -> None:
     """Raise `TypeError` unless `dtype` is a NumPy dtype and `shape` holds ints."""
     if not isinstance(dtype, np.dtype):
         raise TypeError(f"dtype must be a numpy dtype, got {type(dtype).__name__}")
-    if not all(isinstance(n, int) for n in shape):
+    if not all(isinstance(n, int) and not isinstance(n, bool) for n in shape):
         hint = (
             ", call compute_chunk_sizes() first"
             if any(isinstance(n, float) for n in shape)
@@ -33,7 +33,8 @@ def as_layer_data(obj: object) -> LayerDataProtocol:
     ------
     TypeError
         If `obj` lacks a member of the layer data protocol, its `dtype` is not
-        a NumPy dtype, or its shape holds anything but integers.
+        a NumPy dtype, or its shape holds anything but integers. A bool is
+        refused although it is a subclass of `int`.
     """
     if not is_layer_data(obj):
         missing = [name for name in MEMBERS if not hasattr(obj, name)]

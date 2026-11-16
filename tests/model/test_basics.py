@@ -1,7 +1,14 @@
 import numpy as np
 import pytest
 
-from napari_core.model import COLORMAPS, Camera, Colormap, Dims, IntensityAppearance
+from napari_core.model import (
+    COLORMAPS,
+    Camera,
+    Colormap,
+    Dims,
+    IntensityAppearance,
+    Transform,
+)
 
 
 def test_setting_ndim_resizes_steps():
@@ -55,6 +62,55 @@ def test_colormap_assignment_with_equal_colors_does_not_emit():
     seen = []
     appearance.events.colormap.connect(seen.append)
     appearance.colormap = Colormap(name="gray", colors=COLORMAPS["gray"].colors.copy())
+    assert seen == []
+
+
+def test_appearance_refuses_a_gamma_that_is_not_positive():
+    """Refuse a gamma of zero or less on construction and on assignment."""
+    with pytest.raises(ValueError, match="gamma"):
+        IntensityAppearance(gamma=0.0)
+    appearance = IntensityAppearance(gamma=2.0)
+    with pytest.raises(ValueError, match="gamma"):
+        appearance.gamma = -1.0
+    assert appearance.gamma == 2.0
+
+
+def test_appearance_events_carry_the_stored_values():
+    """Emit the stored float and tuple for a gamma and limits given as int and list."""
+    appearance = IntensityAppearance()
+    seen = []
+    appearance.events.gamma.connect(seen.append)
+    appearance.events.contrast_limits.connect(seen.append)
+    appearance.gamma = 2
+    appearance.contrast_limits = [0, 5]
+    assert seen == [2.0, (0.0, 5.0)]
+    assert isinstance(seen[0], float) and isinstance(seen[1], tuple)
+
+
+def test_transform_validates_and_emits_the_stored_tuple_on_assignment():
+    """Store and emit a tuple of floats when a list of ints is assigned."""
+    transform = Transform(scale=(1.0, 1.0), translate=(0.0, 0.0))
+    seen = []
+    transform.events.scale.connect(seen.append)
+    transform.scale = [2, 3]
+    assert transform.scale == (2.0, 3.0)
+    assert seen == [(2.0, 3.0)]
+    assert all(isinstance(value, float) for value in seen[0])
+
+
+def test_transform_refuses_scale_and_translate_of_different_lengths():
+    """Refuse lengths that differ, on construction and on assignment of either."""
+    with pytest.raises(ValueError, match="2 scale.*1 translate"):
+        Transform(scale=(1.0, 1.0), translate=(0.0,))
+    transform = Transform(scale=(1.0, 1.0), translate=(0.0, 0.0))
+    seen = []
+    transform.events.scale.connect(seen.append)
+    transform.events.translate.connect(seen.append)
+    with pytest.raises(ValueError, match="1 scale.*2 translate"):
+        transform.scale = (2.0,)
+    with pytest.raises(ValueError, match="2 scale.*3 translate"):
+        transform.translate = (1.0, 1.0, 1.0)
+    assert transform == Transform(scale=(1.0, 1.0), translate=(0.0, 0.0))
     assert seen == []
 
 
