@@ -167,6 +167,9 @@ class Image(Layer):
         self.appearance.contrast_limits = (low, high if high > low else low + 1.0)
 
 
-# psygnal rebuilds __eq_operators__ from the annotations when the class is
-# created, so an entry in the class body would be overwritten.
+# psygnal rebuilds __eq_operators__ from the annotations when each class is
+# created, so an entry in a class body, or on Layer, would be overwritten. A
+# component is replaced when another object is assigned, even an equal one.
 Image.__eq_operators__["data"] = operator.is_
+Image.__eq_operators__["transform"] = operator.is_
+Image.__eq_operators__["appearance"] = operator.is_

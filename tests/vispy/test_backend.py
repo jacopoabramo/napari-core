@@ -275,3 +275,41 @@ def test_failed_surface_closes_its_canvas(
     with pytest.raises(LookupError):
         VispyBackend[QWidget]().create_surface(viewer.view, None)
     assert len(closed) == 1
+
+
+def test_equal_replacement_appearance_is_followed_and_the_old_one_is_not(
+    qapp: Application,
+) -> None:
+    """Follow a replacement appearance that equals the old one."""
+    viewer = ViewerModel()
+    layer = white_image()
+    viewer.layers.append(layer)
+    viewer.camera.center = (25.0, 25.0)
+    surface = shown(viewer, qapp)
+    old = layer.appearance
+    layer.appearance = old.model_copy()
+    assert layer.appearance == old and layer.appearance is not old
+    old.colormap = "green"
+    assert middle(surface.screenshot()) == WHITE
+    layer.appearance.colormap = "blue"
+    assert middle(surface.screenshot()) == BLUE
+    surface.close()
+
+
+def test_equal_replacement_transform_is_followed_and_the_old_one_is_not(
+    qapp: Application,
+) -> None:
+    """Follow a replacement transform that equals the old one."""
+    viewer = ViewerModel()
+    layer = white_image()
+    viewer.layers.append(layer)
+    viewer.camera.center = (25.0, 25.0)
+    surface = shown(viewer, qapp)
+    old = layer.transform
+    layer.transform = old.model_copy()
+    assert layer.transform == old and layer.transform is not old
+    old.translate = (10_000.0, 10_000.0)
+    assert middle(surface.screenshot()) == WHITE
+    layer.transform.translate = (10_000.0, 10_000.0)
+    assert middle(surface.screenshot()) == BACKGROUND
+    surface.close()

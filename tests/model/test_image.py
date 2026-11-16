@@ -167,3 +167,36 @@ def test_lazy_data_takes_limits_from_the_middle_plane_only():
     """Read only the middle plane of dask data for the contrast limits."""
     data = as_layer_data(da.arange(120).reshape(2, 3, 4, 5))
     assert Image(name="a", data=data).contrast_limits == (80.0, 99.0)
+
+
+def test_equal_but_distinct_components_replace_the_old_ones():
+    """Emit for an equal component object that is a different object, not the same."""
+    layer = Image(name="a", data=stack())
+    appearance, transform = layer.appearance, layer.transform
+    seen_appearance, seen_transform = [], []
+    layer.events.appearance.connect(seen_appearance.append)
+    layer.events.transform.connect(seen_transform.append)
+    layer.appearance = appearance
+    layer.transform = transform
+    assert seen_appearance == [] and seen_transform == []
+    new_appearance = appearance.model_copy()
+    new_transform = transform.model_copy()
+    assert new_appearance == appearance and new_transform == transform
+    layer.appearance = new_appearance
+    layer.transform = new_transform
+    assert seen_appearance == [new_appearance]
+    assert seen_transform == [new_transform]
+    assert layer.appearance is new_appearance and layer.transform is new_transform
+
+
+def test_shortcut_setters_write_through_to_the_existing_components():
+    """Keep the component objects when a shortcut property is set."""
+    layer = Image(name="a", data=stack())
+    appearance, transform = layer.appearance, layer.transform
+    layer.colormap = "red"
+    layer.contrast_limits = (1.0, 5.0)
+    layer.gamma = 0.5
+    layer.scale = (2.0,) * 3
+    layer.translate = (1.0,) * 3
+    assert layer.appearance is appearance and layer.transform is transform
+    assert appearance.gamma == 0.5 and transform.scale == (2.0,) * 3
