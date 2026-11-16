@@ -1,14 +1,19 @@
+import gc
+import weakref
+
 import numpy as np
 import numpy.typing as npt
 import pytest
 from PyQt6.QtCore import QPoint, Qt
+from PyQt6.QtGui import QImage
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QWidget
 from vispy.app import Application
 from vispy.scene import SceneCanvas
 
+from napari_core.interaction import attach
 from napari_core.model import Image, IntensityAppearance, Layer, Transform, ViewerModel
-from napari_core.render import RenderSurface, create_layer_adapter
+from napari_core.render import RenderSurface, SurfaceEvent, create_layer_adapter
 from napari_core.render.vispy import VispyBackend
 
 pytestmark = pytest.mark.gl
@@ -41,6 +46,16 @@ def shown(viewer: ViewerModel, qapp: Application) -> RenderSurface[QWidget]:
 def middle(shot: npt.NDArray[np.uint8]) -> tuple[int, ...]:
     """Return the RGB value of the middle pixel of `shot`."""
     return tuple(shot[shot.shape[0] // 2, shot.shape[1] // 2, :3])
+
+
+def grab(native: QWidget) -> npt.NDArray[np.uint8]:
+    """Return the RGBA rows of a screenshot of `native`."""
+    image = native.grab().toImage().convertToFormat(QImage.Format.Format_RGBA8888)
+    bits = image.constBits()
+    assert bits is not None
+    bits.setsize(image.sizeInBytes())
+    pixels = np.frombuffer(bits, dtype=np.uint8)
+    return pixels.reshape(image.height(), image.width(), 4).copy()
 
 
 def test_image_is_drawn(qapp: Application) -> None:
@@ -313,3 +328,52 @@ def test_equal_replacement_transform_is_followed_and_the_old_one_is_not(
     layer.transform.translate = (10_000.0, 10_000.0)
     assert middle(surface.screenshot()) == BACKGROUND
     surface.close()
+
+
+def only_native(
+    viewer: ViewerModel, qapp: Application, seen: list[SurfaceEvent]
+) -> QWidget:
+    """Return the native widget of a shown, attached surface that is then dropped."""
+    surface = shown(viewer, qapp)
+    surface.add_event_handler(seen.append, "pointer_down")
+    attach(viewer.view, surface)
+    return surface.native
+
+
+def test_surface_works_while_only_its_widget_is_kept(qapp: Application) -> None:
+    """Keep following the model, reaching handlers and panning without the surface."""
+    viewer = ViewerModel()
+    viewer.layers.append(white_image())
+    viewer.camera.center = (25.0, 25.0)
+    seen: list[SurfaceEvent] = []
+    native = only_native(viewer, qapp, seen)
+    gc.collect()
+    assert middle(grab(native)) != BACKGROUND
+    viewer.camera.center = (10_000.0, 10_000.0)
+    qapp.process_events()
+    assert middle(grab(native)) == BACKGROUND
+    viewer.camera.center = (25.0, 25.0)
+    QTest.mousePress(native, Qt.MouseButton.LeftButton, pos=QPoint(30, 40))
+    assert [event["event_type"] for event in seen] == ["pointer_down"]
+    QTest.mouseMove(native, QPoint(30, 40))
+    for offset in range(1, 6):
+        QTest.mouseMove(native, QPoint(30 + 4 * offset, 40))
+        QTest.qWait(20)
+    QTest.mouseRelease(native, Qt.MouseButton.LeftButton, pos=QPoint(50, 40))
+    assert viewer.camera.center[1] < 25.0
+    native.close()
+
+
+def test_closed_surface_is_freed_and_ignores_the_model(qapp: Application) -> None:
+    """Free a closed surface once nothing refers to it and ignore later changes."""
+    viewer = ViewerModel()
+    viewer.layers.append(white_image())
+    surface = shown(viewer, qapp)
+    reference = weakref.ref(surface)
+    surface.close()
+    del surface
+    gc.collect()
+    assert reference() is None
+    viewer.camera.center = (10_000.0, 10_000.0)
+    viewer.layers[0].gamma = 0.5
+    viewer.layers.clear()

@@ -12,7 +12,8 @@ uv run python examples/show_image.py
 ```
 
 The example needs an OpenGL driver and a Qt binding (PyQt6 is in the
-development group).
+development group). It opens a window, so it needs a display, and it needs the
+`vispy` and `dask` extras, which the development group already installs.
 
 ## Run the checks
 

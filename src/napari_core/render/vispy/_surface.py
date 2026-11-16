@@ -26,6 +26,7 @@ from ._image import BACKEND_NAME
 NativeT = TypeVar("NativeT")
 
 WHEEL_NOTCH = 120
+OWNER_ATTRIBUTE = "napari_core_surface"
 
 
 class Attachable(Protocol):
@@ -145,11 +146,14 @@ class VispySurface(Generic[NativeT]):
         events["mouse_wheel"].connect(self._on_wheel)
         events["resize"].connect(self._on_resize)
         events["draw"].connect(self._flush_move)
+        events["close"].connect(self._release)
         try:
             self._sync: ViewSync | None = ViewSync(view, camera, box.scene)
         except BaseException:
             self._canvas.close()
             raise
+        # Handlers are held weakly, so the widget owns the surface.
+        setattr(self._canvas.native, OWNER_ATTRIBUTE, self)
 
     @property
     def native(self) -> NativeT:
@@ -187,10 +191,15 @@ class VispySurface(Generic[NativeT]):
 
     def close(self) -> None:
         """Close the layer adapters and the canvas."""
+        self._release()
+        self._canvas.close()
+
+    def _release(self, _event: object = None) -> None:
         if self._sync is not None:
             self._sync.close()
             self._sync = None
-        self._canvas.close()
+        if getattr(self._canvas.native, OWNER_ATTRIBUTE, None) is self:
+            delattr(self._canvas.native, OWNER_ATTRIBUTE)
 
     def _emit(self, event: SurfaceEvent) -> None:
         for handler, types in self._handlers:
