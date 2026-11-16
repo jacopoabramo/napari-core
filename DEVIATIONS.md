@@ -92,9 +92,9 @@ effect of psygnal's evented list and the least certain of them.
 
 | Behaviour | Workaround in the prototype | Candidate for a change in psygnal |
 |---|---|---|
-| A field with no entry in `field_dependencies` emits the value as it was assigned, before validation, and compares that raw value with the old one. Assigning `2` to a float field emits the integer `2`, and assigning a colormap name emits the string. | The field lists itself in `field_dependencies`: `Camera.center`, `Camera.zoom`, `Dims.current_step`, `IntensityAppearance.colormap`, and `Layer.name`, `visible` and `opacity`. psygnal's path for fields with dependents reads the stored value back after validation and emits only when it differs. pydantic's `ConfigDict` has no `field_dependencies` key, so both checkers reject it, and `EventedConfigDict` in `napari_core.model` adds the key. A field listing itself is not documented psygnal behaviour. | Yes: emit the validated value on every path, and export a configuration type that has `field_dependencies`. |
+| A field with no entry in `field_dependencies` emits the value as it was assigned, before validation, and compares that raw value with the old one. Assigning `2` to a float field emits the integer `2`, and assigning a colormap name emits the string. | The field lists itself in `field_dependencies`: `Camera.center` and `zoom`, `Dims.current_step`, `Transform.scale` and `translate`, `IntensityAppearance.colormap`, `contrast_limits` and `gamma`, and `Layer.name`, `visible` and `opacity`. psygnal's path for fields with dependents reads the stored value back after validation and emits only when it differs. pydantic's `ConfigDict` has no `field_dependencies` key, so both checkers reject it, and `EventedConfigDict`, which `napari_core.model` exports for layer types written in other packages, adds the key. A field listing itself is not documented psygnal behaviour. | Yes: emit the validated value on every path, and export a configuration type that has `field_dependencies`. |
 | psygnal's metaclass replaces an `__eq_operators__` dictionary set in the class body with one it builds from the annotations, and builds it again for every subclass, so an entry set on a base class does not reach its subclasses. | The metaclass `LayerMeta` of `Layer` sets identity comparison after psygnal has built the dictionary: for every field annotated with an evented model or a union holding one, and for every name in the class variable `compared_by_identity` of the class and its bases (`Image` lists `data`). A pydantic hook or `__init_subclass__` runs before psygnal resets the dictionary, so only a metaclass can do it. | Yes: honour a declared `__eq_operators__` and inherit it from the base class. |
-| `SignalInstance.disconnect` annotates its slot as a bare `Callable`, so strict pyright reports `Type of "disconnect" is partially unknown` (`reportUnknownMemberType`) at every call. | The core never calls `disconnect`. Each group of connections is a set of bound methods of one small object (`_Follower` in the slicer; `Reactions`, `AppearanceReactions`, `TransformReactions` and `ViewSync` in the vispy backend). psygnal holds bound methods weakly, so dropping the object disconnects all of them. This relies on the object being freed as soon as its last reference goes, as CPython's reference counting does. | Yes: annotate the slot completely. |
+| `SignalInstance.disconnect` annotates its slot as a bare `Callable`, so strict pyright reports `Type of "disconnect" is partially unknown` (`reportUnknownMemberType`) at every call. | The core never calls `disconnect`. Each group of connections is a set of bound methods of one small object (`Follower` in the slicer; `Reactions`, `AppearanceReactions`, `TransformReactions` and `ViewSync` in the vispy backend). psygnal holds bound methods weakly, so dropping the object disconnects all of them. This relies on the object being freed as soon as its last reference goes, as CPython's reference counting does. | Yes: annotate the slot completely. |
 | An `EventedList` built with its default `child_events=True` connects every signal of each inserted item, and with pydantic 2.14.3 inserting a layer emits pydantic's `PydanticDeprecatedSince211` warning. | `View.layers` is built with `child_events=False`, also when a list is passed to the constructor. | Possibly; the cause inside psygnal was not investigated. |
 
 Recommendation: change neither for now. The workarounds are small, and each
@@ -162,12 +162,29 @@ follows section 3.4: the vispy surface emits surface events only.
 Recommendation: change the target. Swap the rows of `interaction` and
 `render`, and say in the backends' row that a backend emits surface events.
 
+### The camera's mapping to world coordinates is written twice
+
+The target puts the camera controllers and the conversion of surface pixels
+into world positions in `interaction`, so that napari's camera conventions
+are written once instead of once per backend.
+
+The prototype writes the mapping twice. `surface_to_world` in
+`napari_core.interaction` turns a surface pixel into a world point from the
+camera's `center` and `zoom` and the view's `canvas_size`, and the camera
+controller repeats that arithmetic when it zooms about the pointer. The vispy
+surface needs the same mapping in the other direction, to set the world
+rectangle its vispy camera shows, and computes it itself, because `render`
+sits below `interaction` and a backend therefore cannot call into it. Every
+further backend would compute it once more.
+
+Recommendation: change the target to put the mapping between the camera and
+world coordinates in the model, where `interaction` and every backend can
+reach it. The prototype did not do this.
+
 ### What each package imports
 
 The target lists what each package may import besides the packages above it.
-The prototype's packages import the following, which the import-linter
-contracts and a test that imports the core in a fresh interpreter (and finds
-no vispy, Qt or dask module loaded) keep in place:
+The prototype's packages import the following:
 
 | Package | Core packages it imports | Other libraries |
 |---|---|---|
@@ -178,6 +195,17 @@ no vispy, Qt or dask module loaded) keep in place:
 | `napari_core.interaction` | `model`, `render` | none |
 | `napari_core.render.vispy` | `typing`, `model`, `render` | vispy, numpy |
 
+Only part of this table is enforced. Three import-linter contracts keep the
+order of the core packages, keep every Qt binding out of the whole package,
+and let only `napari_core.render.vispy` and its submodules import vispy. Two
+tests import the core and the vispy backend in fresh interpreters: the core
+loads no vispy, Qt or dask module, and the backend loads no Qt binding.
+Nothing checks the "Other libraries" column, so a core package could start
+importing another library without a check failing. The vispy contract looks
+at direct imports only, so a core module that imported the vispy backend
+would reach vispy without breaking it, but the test of the core's imports
+would then fail, because every core module is loaded when its package is.
+
 Two details differ from the target. typing-extensions is imported by three
 packages (for `TypeVar` with a default, `TypeIs` and `override`) but appears in
 no row of the target's table, although section 3.1 itself needs it for the
@@ -187,10 +215,11 @@ and turns a slice into NumPy with `np.asarray`, which goes through dask's own
 `__array__`.
 
 The target also asks for a contract that forbids importing a package's private
-modules from outside the package. The prototype has only three contracts (the
-package order, no Qt binding anywhere in the core, vispy only in the vispy
-backend), and two test fixtures reach the private adapter registries by their
-module paths.
+modules from outside the package. The prototype has only the three contracts
+above, and the tests reach private modules by their paths in three places:
+two fixtures replace the private adapter registries of `napari_core.data`
+and `napari_core.render`, and one vispy test replaces the canvas class that
+the vispy surface builds.
 
 Recommendation: change the target to list typing-extensions as a core
 dependency every package may import. Change the prototype later to add the
@@ -282,9 +311,11 @@ The prototype's `napari_core.data.as_layer_data(obj: object) -> LayerDataProtoco
 does the same check and returns its argument typed as layer data, so typed
 code starts from the value it returns. It also checks what a member check
 cannot: that `dtype` is a NumPy dtype and that every entry of `shape` is a
-Python `int`. It raises `TypeError` in every case. `Image.data` is checked by
-a field validator that calls it, and pydantic reports the error as a
-`ValidationError`.
+Python `int`, where a `bool` is refused although it is a subclass of `int`.
+It raises `TypeError` in every case. `Image` calls it on construction and in
+the validator of its `data` field, and its `TypeError` reaches the caller
+unchanged in both cases, because pydantic turns a `ValueError` raised in a
+validator into its `ValidationError` but lets a `TypeError` through.
 
 Recommendation: change the target to a function that returns the checked
 value.
@@ -413,19 +444,30 @@ every assignment for no reader. The move and double-click lists are absent.
 
 Recommendation: change the target to type the callback lists with `Self`.
 
-### An `Image` keeps its number of dimensions
+### An `Image` has at least two dimensions and keeps their number
 
-The target does not say what happens when an image's data is replaced by an
-array with another number of dimensions.
+The target does not say how many dimensions an image needs, or what happens
+when its data is replaced by an array with another number of dimensions.
 
-The prototype refuses it. An `Image` checks that its transform has one scale
-and one translation per axis of its data, when it is built and on every
-assignment of `data` or `transform`. An assignment that breaks this raises
-pydantic's `ValidationError`, a `ValueError`, keeps the old value and emits
-nothing. Changing the number of dimensions atomically would need `data` and
-`transform` assigned together, which psygnal's per-field assignment cannot
-express, so a caller who wants another number of dimensions makes a new layer.
-Assigning to `transform.scale` directly is not checked (see the last section).
+The prototype refuses data with fewer than two axes, because a backend draws
+a two-dimensional plane, and it refuses a change of the number of axes. An
+`Image` checks both, together with a transform that has one scale and one
+translation per axis of its data, when it is built and on every assignment
+of `data` or `transform`. An assignment that breaks one of these raises
+pydantic's `ValidationError`, a `ValueError` that names the numbers found,
+keeps the old value and emits nothing. Changing the number of dimensions
+atomically would need `data` and `transform` assigned together, which
+psygnal's per-field assignment cannot express, so a caller who wants another
+number of dimensions makes a new layer.
+
+The parts of the transform are checked as well. The `scale` and `translate`
+properties of `Image` refuse a tuple whose length is not the number of axes,
+with a `ValueError` naming both numbers, before anything is stored. Below
+them, `Transform` refuses a `scale` and a `translate` of different lengths,
+on construction and on assignment, and stores tuples of floats. An
+assignment of another length to `layer.transform.scale` is therefore refused
+too, but its message names the two lengths of the transform rather than the
+image's axes, so the properties give the clearer error.
 
 Recommendation: change the target to decide this, either as the prototype
 does or with an operation that replaces data and transform together.
@@ -444,6 +486,11 @@ not computed whole. It ignores values that are not finite, uses `(0.0, 1.0)`
 when no finite value is left, and widens the range to `(low, low + 1.0)` when
 all values are equal. A constant image of 255 therefore gets `(255.0, 256.0)`
 and is drawn black.
+
+Two values are refused because a backend cannot draw them. `gamma` must be
+above 0, and a layer's `opacity` must be within 0 to 1 inclusive. A value
+outside raises pydantic's `ValidationError` and keeps the old value, whether
+it is assigned to the appearance or through the `gamma` property of `Image`.
 
 Recommendation: change the target to say where default contrast limits come
 from for lazy data. Change the prototype later to compute the in-memory case
@@ -535,9 +582,13 @@ with the size and grid, a cursor, a layer list and a slicer, and a
 `ViewerModel` holds one or more views.
 
 The prototype's `View` has `dims`, `camera`, `canvas_size` (logical pixels,
-`(640, 480)` until a surface reports its size) and `layers`, a psygnal
-`EventedList` that does not re-emit its layers' events. `dims` and `layers`
-cannot be replaced, because the slicer holds them. `View(layers=[...])` builds
+`(640, 480)` until an attached surface reports its size) and `layers`, a
+psygnal `EventedList` that does not re-emit its layers' events. `dims`,
+`camera` and `layers` are frozen fields: they change through their own
+fields and items, and assigning a new object raises pydantic's
+`ValidationError` and keeps the old one. The slicer and every surface that
+shows the view connect to these objects once, so a replacement would leave
+them following an object nobody changes. `View(layers=[...])` builds
 a new list from the items, refuses an item that is not a `Layer`, and slices
 each layer; an existing `EventedList` passed in is copied, not adopted, so
 later changes to the caller's list do not reach the view. `ViewerModel` holds
@@ -595,8 +646,37 @@ set), and attaches the visual to its scene. An adapter without a visual is
 closed and refused with `TypeError`. Layers are drawn in the order their
 adapters were made.
 
+What a caller sees when a layer cannot be drawn depends on when the layer
+arrives. A layer already in the view when the surface is made, whose type has
+no vispy adapter or whose adapter has no visual, makes `create_surface` raise
+the registry's `LookupError` or the `TypeError` above, and the canvas is
+closed first. A layer appended later raises nothing: the surface logs the
+error once with `logging.exception`, naming the layer and its type, draws
+nothing for it, and keeps drawing the other layers and following later list
+changes. Removing that layer raises nothing either.
+
 Recommendation: change the target. The adapter protocol, or each backend's
 extension of it, should say how an adapter reaches the surface that draws it.
+
+### A backend that fails on a model change
+
+Section 3.2 says that a backend that cannot draw a value reports it through
+its capabilities instead of failing inside a visual.
+
+The prototype has no capabilities, so a backend can only fail, and it fails
+inside the model's signal emission. The vispy adapter reacts to each model
+signal by changing its visual, and an error raised there reaches the caller
+who assigned the value as psygnal's `EmitLoopError`, with the original error
+as its cause, after the value is already stored. To keep this from
+happening, the model refuses the values the vispy backend was found to fail
+on (an image with fewer than two axes, a gamma that is not above 0, and a
+scale or translation whose length is not the image's number of axes), and an
+opacity outside 0 to 1 as well; the section 3.2 entries above give the
+details. Each refusal happens before anything is stored.
+
+Recommendation: change the target. The model should validate what every
+backend needs, so that no backend fails on those values, and the
+capabilities should cover only what differs between backends.
 
 ### `RenderSurface` and `RenderBackend` follow rendercanvas and are generic
 
@@ -634,9 +714,11 @@ The target has the view apply each `SurfaceState` to its canvas model's size.
 
 In the prototype the surface emits a `resize` surface event, and the
 dispatcher that `attach` installs writes `view.canvas_size` from it. A surface
-that is not attached therefore leaves the view at its default size. The vispy
-surface reads `canvas_size` to set its own camera, and `interaction` reads it
-to convert surface pixels into world coordinates.
+that is not attached therefore leaves the view at its default size.
+`interaction` reads `canvas_size` to convert surface pixels into world
+coordinates, and the vispy surface reads it to set its own camera, so an
+unattached surface draws with the default `(640, 480)` and its picture is
+scaled wrongly until `attach` has written the real size.
 
 Recommendation: change the target to say which package writes the canvas size
 back, or make it part of attaching a surface.
@@ -665,9 +747,17 @@ in the order their adapters were made, so a reordered layer list does not
 change the drawing order. The last is a gap in the surface's own code, which
 does not reorder its visuals; vispy is not the cause.
 
+Backends may also differ in what a move event carries. During a drag, vispy
+puts the pressed button on every move event, so the vispy surface emits
+`pointer_move` with `button` 1 while the left button is held, and 0 for a
+move with no button pressed. rendercanvas's Qt backend reports the button Qt
+gives for a move, and whether that agrees with vispy was not checked.
+
 Recommendation: change neither for the event types, which the target already
 asks for. The target's statement that a backend fills in missing events from
-its own state should name enter and leave as known gaps of vispy.
+its own state should name enter and leave as known gaps of vispy, and the
+target should say what `button` holds on a move, so that every backend
+reports the same.
 
 ### A surface lives as long as its native widget
 
@@ -679,17 +769,22 @@ object, and psygnal does the same. A surface that nothing else held was freed,
 leaving a window that kept its first picture and responded to nothing. The
 surface therefore sets a reference to itself as an attribute of its native
 widget, so it lives as long as the widget object does, whether or not the
-caller keeps it. `surface.close()` releases it, and so does dropping the
-widget. Closing the widget with its own `close()` does not: vispy's Qt backend
+caller keeps it. `surface.close()` is the reliable way to release it.
+Dropping the widget object releases it only at the next cyclic garbage
+collection, because the surface and the widget refer to each other through
+the vispy canvas; until then model changes still reach the widget, and if its
+Qt object was already deleted, vispy logs an error for each. Closing the
+widget with its own `close()` does not release it at all: vispy's Qt backend
 does not pass a widget's close event on to the canvas, and a hook of the
 surface's own would need Qt in the core, which the dependency rules of
-section 2 forbid. A widget that is closed but still
-referenced keeps following the model.
+section 2 forbid. A widget that is closed but still referenced keeps
+following the model.
 
 The front end therefore has to call `surface.close()` when it closes the
-window that hosts the surface. The target's `FrontEnd` protocol in section 3.6
-has `show_viewer` and `add_panel`, and says nothing about who closes a surface
-or when.
+window that hosts the surface. The example does this in the `closeEvent` of
+its window, before passing the event on to Qt. The target's `FrontEnd`
+protocol in section 3.6 has `show_viewer` and `add_panel`, and says nothing
+about who closes a surface or when.
 
 Recommendation: change the target. Section 3.6 should make the front end
 responsible for closing each surface it hosts when the window or panel that
@@ -735,13 +830,16 @@ surface event. Several fields are constants in the prototype:
 
 `position` holds the world coordinates of the pointer on the two displayed
 axes and the current step on every other axis, and `dims_point` holds the
-current step as floats. `button` comes from the surface event and is `0` when
-no button is involved, never `None`. A modifier name other than `Shift`,
-`Control`, `Alt` or `Meta` makes the handler raise `ValueError`.
+current step as floats. `button` comes from the surface event and is never
+`None`. It is `0` for a move with no button pressed, but during a drag the
+vispy surface puts the pressed button on every move (see "Two levels of
+events"), so a layer callback sees `mouse_move` with `button` 1 while the
+left button is held. A modifier name other than `Shift`, `Control`, `Alt` or
+`Meta` makes the handler raise `ValueError`.
 
 Recommendation: change neither for the constants, which follow from the
-prototype's scope. The target should say what `button` holds when no button
-is involved.
+prototype's scope. The target should say what `button` holds on a move, both
+with and without a button pressed.
 
 ### Callbacks go to the top visible layer
 
@@ -814,8 +912,10 @@ which must be above zero; and `mouse_pan` and `mouse_zoom`, both true by
 default, which a layer callback sets to false to keep the camera still. The
 other fields of napari's camera, `angles`, `perspective`, `orientation` and
 `synced`, belong to three-dimensional display or to several views, which the
-prototype leaves out. The surface never writes to the camera; it redraws when
-the camera's signals fire.
+prototype leaves out. The camera cannot be replaced: `View.camera` is a
+frozen field, like `dims` and `layers`, and changes through its own fields.
+The surface never writes to the camera; it redraws when the camera's signals
+fire.
 
 Recommendation: change neither.
 
@@ -824,9 +924,6 @@ Recommendation: change neither.
 These are known and left for later, because none of them blocks the prototype
 from showing what it was built to show.
 
-- `Transform` does not validate on assignment, so `layer.scale = (1.0,)` is
-  accepted for a two-dimensional image, and it does not check that `scale` and
-  `translate` have the same length.
 - `Dims.nsteps` accepts entries of zero or less.
 - After a change of `ndim`, the order in which `nsteps` and `current_step`
   emit was seen to vary between runs.
@@ -845,11 +942,13 @@ from showing what it was built to show.
 - `NativeT` and `NativeT_co` are not exported from `napari_core.render`, so the
   vispy backend defines its own type variable.
 - The camera controller repeats the conversion from surface to world
-  coordinates instead of calling `surface_to_world`.
-- The comment that records the origin of the one-member protocols does not
-  say that `DTypeT_co` has a default that array-api-typing lacks, and gives a
-  dask array, not the zarr case above, as the reason `__getitem__` returns
-  `object`.
+  coordinates instead of calling `surface_to_world`, and the vispy surface
+  computes the same mapping again (section 2).
+- The tests need vispy, PyQt6 and dask installed. The vispy tests are skipped
+  only when vispy cannot use its PyQt6 backend. When a library is missing,
+  the modules that import it fail at collection instead, because their
+  imports are at the top of the module: without vispy, the shared fixtures in
+  `conftest.py` fail to import and no test runs.
 - Some behaviour has no committed test: the error branch of the dask adapter's
   `materialize`, building an input event directly, that the surface never
   writes to the camera, the `Optional[...]` and `Union[...]` spellings of an
