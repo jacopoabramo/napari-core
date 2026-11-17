@@ -1,19 +1,12 @@
+import pytest
+from helpers import view
+
 from napari_core.model import (
-    Camera,
     View,
     WorldRect,
     surface_to_world,
     visible_rect,
 )
-
-
-def view(
-    size: tuple[int, int] = (200, 100),
-    zoom: float = 2.0,
-    center: tuple[float, float] = (10.0, 20.0),
-) -> View:
-    """Return a view with the given canvas size and camera."""
-    return View(canvas_size=size, camera=Camera(zoom=zoom, center=center))
 
 
 def test_surface_middle_is_the_camera_center() -> None:
@@ -36,21 +29,34 @@ def test_visible_rect_is_centred_on_the_camera() -> None:
 
 def test_visible_rect_shrinks_with_zoom() -> None:
     """Halve the visible world when the zoom doubles."""
-    v = View(canvas_size=(200, 100))
-    v.camera.center = (25.0, 25.0)
-    v.camera.zoom = 2.0
-    rect = visible_rect(v)
-    assert rect == WorldRect(left=-25.0, top=0.0, width=100.0, height=50.0)
-    assert (rect.right, rect.bottom) == (75.0, 50.0)
+    rect = visible_rect(view(zoom=2.0))
+    assert rect == WorldRect(left=-30.0, top=-15.0, width=100.0, height=50.0)
+    assert (rect.right, rect.bottom) == (70.0, 35.0)
 
 
-def test_visible_rect_of_a_surface_of_zero_size_is_empty() -> None:
-    """Return a rectangle of no width and height for a canvas of zero size."""
-    v = View(canvas_size=(0, 0))
-    assert visible_rect(v) == WorldRect(left=0.0, top=0.0, width=0.0, height=0.0)
+@pytest.mark.parametrize(
+    ("size", "expected"),
+    [
+        ((0, 0), WorldRect(left=20.0, top=10.0, width=0.0, height=0.0)),
+        ((0, 100), WorldRect(left=20.0, top=-40.0, width=0.0, height=100.0)),
+    ],
+)
+def test_visible_rect_of_a_canvas_with_no_width_has_no_width(
+    size: tuple[int, int], expected: WorldRect
+) -> None:
+    """Keep the camera's centre in a rectangle of a canvas with a zero side."""
+    assert visible_rect(view(size=size, zoom=1.0)) == expected
 
 
 def test_surface_to_world_is_row_then_column() -> None:
     """Map a surface pixel to the world (row, column) under it."""
     v = View(canvas_size=(200, 100))
     assert surface_to_world(v, 110, 40) == (-10.0, 10.0)
+
+
+def test_surface_to_world_answers_for_a_given_zoom() -> None:
+    """Map with the given zoom and leave the camera unchanged."""
+    v = view(zoom=1.0)
+    assert surface_to_world(v, 110, 40, zoom=2.0) == (5.0, 25.0)
+    assert v.camera.zoom == 1.0
+    assert v.camera.center == (10.0, 20.0)

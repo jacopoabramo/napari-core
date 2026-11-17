@@ -1,19 +1,10 @@
 from collections.abc import Generator
 
 import pytest
-from helpers import FakeSurface, pointer, view_with_image, wheel
+from helpers import FakeSurface, pointer, view, view_with_image, wheel
 
 from napari_core.interaction import attach
-from napari_core.model import ButtonEvent, Camera, Image, View, surface_to_world
-
-
-def view(
-    size: tuple[int, int] = (200, 100),
-    zoom: float = 2.0,
-    center: tuple[float, float] = (10.0, 20.0),
-) -> View:
-    """Return a view with the given canvas size and camera."""
-    return View(canvas_size=size, camera=Camera(zoom=zoom, center=center))
+from napari_core.model import ButtonEvent, Image, surface_to_world
 
 
 def test_drag_pans_by_the_pixel_distance_over_zoom(surface: FakeSurface) -> None:

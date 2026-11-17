@@ -4,7 +4,6 @@ import math
 
 from napari_core.model import (
     ButtonEvent,
-    Camera,
     View,
     WheelEvent,
     surface_to_world,
@@ -65,11 +64,7 @@ class CameraController:
         if not (math.isfinite(zoom) and zoom > 0):
             return
         before = surface_to_world(self._view, x, y)
-        zoomed = View(
-            canvas_size=self._view.canvas_size,
-            camera=Camera(center=camera.center, zoom=zoom),
-        )
-        after = surface_to_world(zoomed, x, y)
+        after = surface_to_world(self._view, x, y, zoom=zoom)
         row, column = camera.center
         center = (row + before[0] - after[0], column + before[1] - after[1])
         if not all(map(math.isfinite, center)):

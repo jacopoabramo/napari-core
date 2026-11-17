@@ -10,6 +10,7 @@ from PyQt6.QtGui import QMouseEvent, QWheelEvent
 from PyQt6.QtWidgets import QApplication, QWidget
 
 from napari_core.model import (
+    Camera,
     Image,
     IntensityAppearance,
     Layer,
@@ -25,6 +26,16 @@ from napari_core.render import (
     SurfacePointerEvent,
     SurfaceWheelEvent,
 )
+
+
+def view(
+    size: tuple[int, int] = (200, 100),
+    zoom: float = 2.0,
+    center: tuple[float, float] = (10.0, 20.0),
+) -> View:
+    """Return a view with the given canvas size and camera."""
+    return View(canvas_size=size, camera=Camera(zoom=zoom, center=center))
+
 
 PointerKind = Literal["pointer_down", "pointer_up", "pointer_move", "double_click"]
 BackendFactory: TypeAlias = Callable[[], RenderBackend[QWidget]]

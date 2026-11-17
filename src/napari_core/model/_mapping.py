@@ -45,9 +45,18 @@ def visible_rect(view: View) -> WorldRect:
     )
 
 
-def surface_to_world(view: View, x: float, y: float) -> tuple[float, float]:
-    """Return the world point `(row, column)` under surface pixel `(x, y)`."""
+def surface_to_world(
+    view: View, x: float, y: float, *, zoom: float | None = None
+) -> tuple[float, float]:
+    """Return the world point `(row, column)` under surface pixel `(x, y)`.
+
+    Parameters
+    ----------
+    zoom
+        Answer for this zoom in place of the camera's, which stays unchanged.
+    """
     width, height = view.canvas_size
     row, column = view.camera.center
-    zoom = view.camera.zoom
+    if zoom is None:
+        zoom = view.camera.zoom
     return (row + (y - height / 2) / zoom, column + (x - width / 2) / zoom)
