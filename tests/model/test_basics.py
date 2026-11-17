@@ -1,11 +1,9 @@
-import numpy as np
 import pytest
+from cmap import Colormap
 from helpers import assign
 
 from napari_core.model import (
-    COLORMAPS,
     Camera,
-    Colormap,
     Dims,
     IntensityAppearance,
     Transform,
@@ -47,22 +45,21 @@ def test_camera_rejects_non_positive_zoom() -> None:
 def test_appearance_accepts_a_colormap_name() -> None:
     """Look a colormap up by name."""
     appearance = IntensityAppearance.model_validate({"colormap": "magenta"})
-    assert appearance.colormap.name == "magenta"
-    np.testing.assert_allclose(appearance.colormap.colors[-1], (1, 0, 1, 1))
+    assert appearance.colormap == Colormap("magenta")
 
 
 def test_unknown_colormap_name_is_refused() -> None:
     """Refuse a colormap name that is not built in."""
-    with pytest.raises(ValueError, match="viridis"):
-        IntensityAppearance.model_validate({"colormap": "viridis"})
+    with pytest.raises(ValueError, match="not found"):
+        IntensityAppearance.model_validate({"colormap": "no_such_colormap"})
 
 
-def test_colormap_assignment_with_equal_colors_does_not_emit() -> None:
-    """Compare colormap colours by value."""
+def test_colormap_assignment_with_an_equal_colormap_does_not_emit() -> None:
+    """Compare colormaps by value, so a second object of the same colormap is silent."""
     appearance = IntensityAppearance()
     seen: list[Colormap] = []
     appearance.events.colormap.connect(seen.append)
-    appearance.colormap = Colormap(name="gray", colors=COLORMAPS["gray"].colors.copy())
+    appearance.colormap = Colormap("gray")
     assert seen == []
 
 

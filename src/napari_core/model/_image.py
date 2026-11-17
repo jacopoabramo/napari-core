@@ -3,13 +3,13 @@
 from typing import ClassVar
 
 import numpy as np
+from cmap import Colormap
 from pydantic import Field, ValidationInfo, field_validator, model_validator
 from typing_extensions import override
 
 from napari_core.data import adapter_for, as_layer_data
 from napari_core.typing import BasicKey, LayerDataProtocol, SliceArray
 
-from ._colormap import Colormap, colormap_named
 from ._components import IntensityAppearance, Interpolation, Transform
 from ._config import EventedConfigDict
 from ._dims import Dims
@@ -123,9 +123,7 @@ class Image(Layer):
 
     @colormap.setter
     def colormap(self, value: Colormap | str) -> None:
-        self.appearance.colormap = (
-            colormap_named(value) if isinstance(value, str) else value
-        )
+        self.appearance.colormap = Colormap(value)
 
     @property
     def contrast_limits(self) -> tuple[float, float]:

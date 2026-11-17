@@ -3,10 +3,10 @@
 from collections.abc import Sized
 from enum import StrEnum
 
+from cmap import Colormap
 from psygnal import EventedModel
 from pydantic import Field, ValidationInfo, field_validator
 
-from ._colormap import COLORMAPS, Colormap, colormap_named
 from ._config import EventedConfigDict
 
 
@@ -74,13 +74,7 @@ class IntensityAppearance(EventedModel):
         },
     )
 
-    colormap: Colormap = Field(default_factory=lambda: COLORMAPS["gray"])
+    colormap: Colormap = Field(default_factory=lambda: Colormap("gray"))
     contrast_limits: tuple[float, float] = (0.0, 1.0)
     gamma: float = Field(default=1.0, gt=0)
     interpolation: Interpolation = Interpolation.NEAREST
-
-    @field_validator("colormap", mode="before")
-    @classmethod
-    def _look_up_colormap(cls, value: object) -> object:
-        """Replace a colormap name with the built-in colormap of that name."""
-        return colormap_named(value) if isinstance(value, str) else value

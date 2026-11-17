@@ -3,11 +3,11 @@ from typing import Annotated, ClassVar
 import numpy as np
 import numpy.typing as npt
 import pytest
+from cmap import Colormap
 from helpers import assign
 from psygnal import SignalInstance
 
 from napari_core.model import (
-    COLORMAPS,
     Dims,
     Image,
     IntensityAppearance,
@@ -28,7 +28,7 @@ def test_image_fills_in_transform_and_appearance() -> None:
     layer = Image(name="a", data=stack())
     assert layer.scale == (1.0, 1.0, 1.0)
     assert layer.translate == (0.0, 0.0, 0.0)
-    assert layer.colormap.name == "gray"
+    assert layer.colormap == Colormap("gray")
     assert layer.contrast_limits == (0.0, 23.0)
 
 
@@ -42,10 +42,10 @@ def test_shortcuts_write_through_to_components() -> None:
     assert layer.appearance.gamma == 0.5
 
     layer.colormap = "blue"
-    assert layer.colormap.name == "blue"
+    assert layer.colormap == Colormap("blue")
 
     changes: dict[str, tuple[object, SignalInstance]] = {
-        "colormap": (COLORMAPS["red"], layer.appearance.events.colormap),
+        "colormap": (Colormap("red"), layer.appearance.events.colormap),
         "contrast_limits": ((1.0, 5.0), layer.appearance.events.contrast_limits),
         "scale": ((2.0, 2.0, 2.0), layer.transform.events.scale),
         "translate": ((1.0, 0.0, 0.0), layer.transform.events.translate),
@@ -55,8 +55,17 @@ def test_shortcuts_write_through_to_components() -> None:
         signal.connect(emitted.append)
         setattr(layer, name, value)
         assert len(emitted) == 1, name
-    assert layer.appearance.colormap.name == "red"
+    assert layer.appearance.colormap == Colormap("red")
     assert layer.transform.scale == (2.0, 2.0, 2.0)
+
+
+def test_unknown_colormap_name_is_refused() -> None:
+    """Refuse a name that is not in the catalogue and keep the old colormap."""
+    layer = Image(name="a", data=np.zeros((2, 2)))
+    before = layer.colormap
+    with pytest.raises(ValueError, match="not found"):
+        layer.colormap = "no_such_colormap"
+    assert layer.colormap == before
 
 
 def test_invalid_data_is_refused_on_assignment() -> None:

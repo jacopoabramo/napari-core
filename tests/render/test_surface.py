@@ -5,6 +5,7 @@ from typing import Final
 
 import numpy as np
 import pytest
+from cmap import Colormap
 from helpers import (
     Show,
     assign,
@@ -22,7 +23,6 @@ from PyQt6.QtWidgets import QApplication, QWidget
 
 from napari_core.interaction import attach
 from napari_core.model import (
-    COLORMAPS,
     Camera,
     Image,
     IntensityAppearance,
@@ -240,12 +240,12 @@ def test_replaced_appearance_is_drawn_and_the_old_one_is_not_followed(
     old = layer.appearance
     assert middle(surface.screenshot()) == WHITE
     layer.appearance = IntensityAppearance(
-        colormap=COLORMAPS["red"], contrast_limits=(0.0, 255.0)
+        colormap=Colormap("red"), contrast_limits=(0.0, 255.0)
     )
     assert middle(surface.screenshot()) == RED
-    old.colormap = COLORMAPS["green"]
+    old.colormap = Colormap("green")
     assert middle(surface.screenshot()) == RED
-    layer.appearance.colormap = COLORMAPS["blue"]
+    layer.appearance.colormap = Colormap("blue")
     assert middle(surface.screenshot()) == BLUE
     surface.close()
 
@@ -338,9 +338,9 @@ def test_equal_replacement_appearance_is_followed_and_the_old_one_is_not(
     old = layer.appearance
     layer.appearance = old.model_copy()
     assert layer.appearance == old and layer.appearance is not old
-    old.colormap = COLORMAPS["green"]
+    old.colormap = Colormap("green")
     assert middle(surface.screenshot()) == WHITE
-    layer.appearance.colormap = COLORMAPS["blue"]
+    layer.appearance.colormap = Colormap("blue")
     assert middle(surface.screenshot()) == BLUE
     surface.close()
 

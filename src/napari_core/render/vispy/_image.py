@@ -60,7 +60,7 @@ class AppearanceReactions:
         appearance.events.interpolation.connect(self.show_interpolation)
 
     def show_colormap(self) -> None:
-        self.visual.cmap = VispyColormap(self.appearance.colormap.colors)
+        self.visual.cmap = self.appearance.colormap.to_vispy()
 
     def show_contrast_limits(self) -> None:
         self.visual.clim = self.appearance.contrast_limits
