@@ -322,4 +322,24 @@ def test_lone_press_replaces_a_drag_button_left_by_a_lost_release(
     surface.emit(pointer("pointer_down", 10, 10, button=1, buttons=(1,)))
     surface.emit(pointer("pointer_down", 10, 10, button=2, buttons=(2,)))
     surface.emit(pointer("pointer_move", 12, 10, button=0, buttons=(2,)))
-    assert set(moves) == {2}
+    assert moves == [2, 2]
+
+
+def test_move_takes_the_press_button_when_the_press_lists_no_buttons(
+    surface: FakeSurface,
+) -> None:
+    """Report a press's button on a move even if the press lists no buttons."""
+    view, layer = view_with_image()
+    moves: list[int] = []
+
+    def record(lyr: Image, event: ButtonEvent) -> Generator[None, None, None]:
+        while True:
+            if event.type == "mouse_move":
+                moves.append(event.button)
+            yield
+
+    layer.mouse_drag_callbacks.append(record)
+    attach(view, surface)
+    surface.emit(pointer("pointer_down", 10, 10, button=1))
+    surface.emit(pointer("pointer_move", 12, 10))
+    assert moves == [1]

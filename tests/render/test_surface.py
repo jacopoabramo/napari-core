@@ -207,6 +207,7 @@ def test_mouse_press_reaches_handlers_in_rendercanvas_vocabulary(
     (event,) = seen
     assert event["event_type"] == "pointer_down"
     assert (event["x"], event["y"], event["button"]) == (30.0, 40.0, 1)
+    assert event["buttons"] == (1,)
     surface.close()
 
 

@@ -93,7 +93,9 @@ class Dispatcher:
         dims = self._view.dims
         button = event["button"]
         match kind:
-            case "mouse_press" if event["buttons"] == (button,):
+            case "mouse_press" if self._drag_button == 0 or event["buttons"] == (
+                button,
+            ):
                 self._drag_button = button
             case "mouse_move":
                 button = self._drag_button
