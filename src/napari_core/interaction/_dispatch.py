@@ -1,6 +1,7 @@
 """Connect a surface to a view: surface events become input events."""
 
 import logging
+import weakref
 from collections.abc import Callable, Generator
 from dataclasses import fields
 from functools import partial
@@ -47,11 +48,8 @@ class Dispatcher:
         self._camera = CameraController(view)
         self._last_pos = (0.0, 0.0)
         self._drags: list[tuple[ButtonEvent, Generator[None, None, None], str]] = []
-        self.active = True
 
     def handle(self, event: SurfaceEvent) -> None:
-        if not self.active:
-            return
         width, height = self._view.canvas_size
         if event["event_type"] != "resize" and (width == 0 or height == 0):
             return
@@ -196,6 +194,11 @@ def advance(generator: Generator[None, None, None], label: str) -> bool:
     return True
 
 
+ATTACHED: weakref.WeakKeyDictionary[RenderSurface[object], weakref.ref[Dispatcher]] = (
+    weakref.WeakKeyDictionary()
+)
+
+
 def attach(view: View, surface: RenderSurface[object]) -> Callable[[], None]:
     """Make `surface` drive `view` and return a function that disconnects it.
 
@@ -203,17 +206,34 @@ def attach(view: View, surface: RenderSurface[object]) -> Callable[[], None]:
     first, then the camera, which does not move when a callback set `handled`.
     A `resize` writes the view's `canvas_size`.
 
-    Attaching the same surface and view twice dispatches every event twice.
-    The returned function makes the handler do nothing; it does not remove it
-    from the surface.
+    A surface has one attachment, to one view, until the returned function
+    runs. The function removes the handler from the surface. Calling it again,
+    or after the surface was closed, does nothing; a closed surface can be
+    attached again.
 
     A modifier name that the surface sends and that is not `Shift`,
     `Control`, `Alt` or `Meta` makes the handler raise `ValueError`.
+
+    Raises
+    ------
+    RuntimeError
+        If `surface` is already attached.
     """
+    if (current := ATTACHED.get(surface)) is not None and current() is not None:
+        raise RuntimeError("surface is already attached")
     dispatcher = Dispatcher(view)
+    ATTACHED[surface] = weakref.ref(dispatcher)
     surface.add_event_handler(dispatcher.handle, *EVENT_TYPES)
+    dispatcher_ref = weakref.ref(dispatcher)
+    surface_ref = weakref.ref(surface)
 
     def detach() -> None:
-        dispatcher.active = False
+        if (dispatcher := dispatcher_ref()) is None or (
+            surface := surface_ref()
+        ) is None:
+            return
+        surface.remove_event_handler(dispatcher.handle, *EVENT_TYPES)
+        if (current := ATTACHED.get(surface)) is not None and current() is dispatcher:
+            del ATTACHED[surface]
 
     return detach

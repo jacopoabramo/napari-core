@@ -375,3 +375,48 @@ def test_closing_twice_does_nothing(shown: Show) -> None:
     surface = shown(ViewerModel())
     surface.close()
     surface.close()
+
+
+def test_removed_handler_is_not_called(shown: Show) -> None:
+    """Stop calling a handler once it is removed from the surface."""
+    surface = shown(ViewerModel())
+    seen: list[SurfaceEvent] = []
+    surface.add_event_handler(seen.append, "pointer_down")
+    surface.remove_event_handler(seen.append, "pointer_down")
+    mouse_press(surface.native, Qt.MouseButton.LeftButton, QPoint(30, 40))
+    assert seen == []
+
+
+def test_remove_without_types_removes_every_type(shown: Show) -> None:
+    """Remove a handler from all its event types when no type is given."""
+    surface = shown(ViewerModel())
+    seen: list[SurfaceEvent] = []
+    surface.add_event_handler(seen.append, "pointer_down", "pointer_up")
+    surface.remove_event_handler(seen.append)
+    mouse_press(surface.native, Qt.MouseButton.LeftButton, QPoint(30, 40))
+    assert seen == []
+
+
+def test_remove_of_unknown_handler_does_nothing(shown: Show) -> None:
+    """Accept the removal of a handler that was never added."""
+    surface = shown(ViewerModel())
+    seen: list[SurfaceEvent] = []
+    surface.remove_event_handler(seen.append, "pointer_down")
+
+
+def test_detach_after_close_does_nothing(shown: Show) -> None:
+    """Accept a detach of a surface that is already closed."""
+    viewer = ViewerModel()
+    surface = shown(viewer)
+    detach = attach(viewer.view, surface)
+    surface.close()
+    detach()
+
+
+def test_closed_surface_can_be_attached_again(shown: Show) -> None:
+    """Do not count a closed surface as attached."""
+    viewer = ViewerModel()
+    surface = shown(viewer)
+    attach(viewer.view, surface)
+    surface.close()
+    attach(viewer.view, surface)

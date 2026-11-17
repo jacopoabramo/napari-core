@@ -9,6 +9,7 @@ from napari_core.model import (
     ButtonEvent,
     Image,
     Modifier,
+    View,
     WheelEvent,
     surface_to_world,
 )
@@ -88,6 +89,27 @@ def test_detach_stops_dispatch(surface: FakeSurface) -> None:
     detach()
     surface.emit(pointer("pointer_down", 100, 50, button=1))
     assert seen == []
+
+
+def test_attaching_a_surface_twice_raises(surface: FakeSurface) -> None:
+    """Refuse a second attachment of a surface until the first is detached."""
+    v, _ = view_with_image()
+    detach = attach(v, surface)
+    with pytest.raises(RuntimeError, match="already attached"):
+        attach(v, surface)
+    with pytest.raises(RuntimeError, match="already attached"):
+        attach(View(), surface)
+    detach()
+    attach(v, surface)
+
+
+def test_detach_removes_the_handler_and_can_be_repeated(surface: FakeSurface) -> None:
+    """Leave no handler on the surface after detaching, however often."""
+    v, _ = view_with_image()
+    detach = attach(v, surface)
+    detach()
+    detach()
+    assert surface.handlers == []
 
 
 def test_raising_callback_is_logged_and_the_rest_still_run(

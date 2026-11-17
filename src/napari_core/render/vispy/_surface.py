@@ -4,7 +4,7 @@
 
 import logging
 from collections.abc import Callable
-from typing import Generic, Literal, Protocol, TypeVar, cast, runtime_checkable
+from typing import Generic, Literal, Protocol, cast, runtime_checkable
 
 import numpy as np
 import numpy.typing as npt
@@ -15,6 +15,7 @@ from vispy.scene import PanZoomCamera, SceneCanvas
 from napari_core.model import Layer, View, visible_rect
 from napari_core.render import (
     LayerAdapter,
+    NativeT,
     SurfaceEvent,
     SurfaceEventType,
     SurfacePointerEvent,
@@ -25,8 +26,6 @@ from napari_core.render import (
 from ._image import BACKEND_NAME
 
 logger = logging.getLogger(__name__)
-
-NativeT = TypeVar("NativeT")
 
 WHEEL_NOTCH = 120
 OWNER_ATTRIBUTE = "napari_core_surface"
@@ -208,6 +207,20 @@ class VispySurface(Generic[NativeT]):
         """Call `handler` for each event of one of `types`."""
         self._handlers.append((handler, types))
 
+    def remove_event_handler(
+        self, handler: Callable[[SurfaceEvent], None], *types: SurfaceEventType
+    ) -> None:
+        """Stop calling `handler` for `types`, or for every type when none is given."""
+        kept: list[tuple[Callable[[SurfaceEvent], None], tuple[str, ...]]] = []
+        for registered, registered_types in self._handlers:
+            if registered != handler:
+                kept.append((registered, registered_types))
+            elif types and (
+                rest := tuple(t for t in registered_types if t not in types)
+            ):
+                kept.append((registered, rest))
+        self._handlers = kept
+
     def screenshot(self) -> npt.NDArray[np.uint8]:
         """Return the drawn image as RGBA rows."""
         return np.asarray(self._canvas.render(), dtype=np.uint8)
@@ -215,13 +228,15 @@ class VispySurface(Generic[NativeT]):
     def close(self) -> None:
         """Close the layer adapters and the canvas, and delete the native widget.
 
-        A Qt widget is scheduled for deletion with its `deleteLater`, so it
-        must not be used after this call. Closing again does nothing.
+        The event handlers are dropped. A Qt widget is scheduled for deletion
+        with its `deleteLater`, so it must not be used after this call.
+        Closing again does nothing.
         """
         if self._sync is None:
             return
         self._sync.close()
         self._sync = None
+        self._handlers = []
         if getattr(self._canvas.native, OWNER_ATTRIBUTE, None) is self:
             delattr(self._canvas.native, OWNER_ATTRIBUTE)
         self._close_canvas()

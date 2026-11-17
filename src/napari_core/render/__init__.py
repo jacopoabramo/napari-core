@@ -8,11 +8,13 @@ from ._events import (
     SurfaceResizeEvent,
     SurfaceWheelEvent,
 )
-from ._protocols import LayerAdapter, RenderBackend, RenderSurface
+from ._protocols import LayerAdapter, NativeT, NativeT_co, RenderBackend, RenderSurface
 from ._registry import create_layer_adapter, register_layer_adapter
 
 __all__ = [
     "LayerAdapter",
+    "NativeT",
+    "NativeT_co",
     "RenderBackend",
     "RenderSurface",
     "SurfaceEnterLeaveEvent",

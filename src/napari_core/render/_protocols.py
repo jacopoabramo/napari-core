@@ -52,12 +52,23 @@ class RenderSurface(Protocol[NativeT_co]):
         """Call `handler` for each event of one of `types`."""
         ...
 
+    def remove_event_handler(
+        self, handler: Callable[[SurfaceEvent], None], *types: SurfaceEventType
+    ) -> None:
+        """Stop calling `handler` for `types`, or for every type when none is given.
+
+        A handler is matched by equality, so a bound method written anew
+        matches the one that was added. Does nothing for a handler that is not
+        registered.
+        """
+        ...
+
     def screenshot(self) -> npt.NDArray[np.uint8]:
         """Return the drawn image as RGBA rows."""
         ...
 
     def close(self) -> None:
-        """Release the surface and the adapters of its layers."""
+        """Release the surface and the adapters of its layers, and drop its handlers."""
         ...
 
 

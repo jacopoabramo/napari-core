@@ -3,10 +3,10 @@
 from typing import Generic
 
 from napari_core.model import View
-from napari_core.render import RenderSurface
+from napari_core.render import NativeT, RenderSurface
 
 from ._image import BACKEND_NAME
-from ._surface import NativeT, VispySurface
+from ._surface import VispySurface
 
 
 class VispyBackend(Generic[NativeT]):

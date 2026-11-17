@@ -69,6 +69,19 @@ class FakeSurface:
     ) -> None:
         self.handlers.append((handler, types))
 
+    def remove_event_handler(
+        self, handler: Callable[[SurfaceEvent], None], *types: SurfaceEventType
+    ) -> None:
+        kept: list[tuple[Callable[[SurfaceEvent], None], tuple[str, ...]]] = []
+        for registered, registered_types in self.handlers:
+            if registered != handler:
+                kept.append((registered, registered_types))
+            elif types and (
+                rest := tuple(t for t in registered_types if t not in types)
+            ):
+                kept.append((registered, rest))
+        self.handlers = kept
+
     def screenshot(self) -> npt.NDArray[np.uint8]:
         return np.zeros((100, 200, 4), dtype=np.uint8)
 
