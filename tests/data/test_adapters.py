@@ -1,6 +1,6 @@
-import dask.array as da
 import numpy as np
 import pytest
+from helpers import da
 
 from napari_core.data import (
     adapter_for,
@@ -30,7 +30,7 @@ class AcceptAll:
         return np.zeros(1)
 
 
-def test_numpy_adapter_is_in_memory_and_materializes():
+def test_numpy_adapter_is_in_memory_and_materializes() -> None:
     """Slice a NumPy array through its adapter."""
     array = np.arange(24).reshape(2, 3, 4)
     adapter = adapter_for(array)
@@ -38,7 +38,7 @@ def test_numpy_adapter_is_in_memory_and_materializes():
     np.testing.assert_array_equal(adapter.materialize(array, (1, ...)), array[1])
 
 
-def test_dask_adapter_is_lazy_and_returns_numpy():
+def test_dask_adapter_is_lazy_and_returns_numpy() -> None:
     """Compute a dask slice into a NumPy array."""
     array = da.arange(24).reshape(2, 3, 4)
     adapter = adapter_for(as_layer_data(array))
@@ -48,14 +48,14 @@ def test_dask_adapter_is_lazy_and_returns_numpy():
     np.testing.assert_array_equal(result, np.arange(12, 24).reshape(3, 4))
 
 
-def test_higher_priority_adapter_wins(restore_adapters):
+def test_higher_priority_adapter_wins(restore_adapters: None) -> None:
     """Prefer the adapter registered with the higher priority."""
     special = AcceptAll()
     register_array_adapter(special, priority=10)
     assert adapter_for(np.zeros(3)) is special
 
 
-def test_unknown_array_type_is_refused():
+def test_unknown_array_type_is_refused() -> None:
     """Raise when no adapter accepts the data."""
     with pytest.raises(TypeError, match="no array adapter"):
         adapter_for(as_layer_data(FakeArray()))

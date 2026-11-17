@@ -1,26 +1,32 @@
+from collections.abc import Generator
+
 import pytest
-from helpers import pointer, view_with_image, wheel
+from helpers import FakeSurface, pointer, view_with_image, wheel
 
 from napari_core.interaction import attach, surface_to_world
-from napari_core.model import Camera, View
+from napari_core.model import ButtonEvent, Camera, Image, View
 
 
-def view(size=(200, 100), zoom=2.0, center=(10.0, 20.0)):
+def view(
+    size: tuple[int, int] = (200, 100),
+    zoom: float = 2.0,
+    center: tuple[float, float] = (10.0, 20.0),
+) -> View:
     """Return a view with the given canvas size and camera."""
     return View(canvas_size=size, camera=Camera(zoom=zoom, center=center))
 
 
-def test_surface_middle_is_the_camera_center():
+def test_surface_middle_is_the_camera_center() -> None:
     """Map the middle of the surface to the camera centre."""
     assert surface_to_world(view(), 100, 50) == (10.0, 20.0)
 
 
-def test_surface_offsets_scale_with_zoom():
+def test_surface_offsets_scale_with_zoom() -> None:
     """Map surface y to world rows and x to columns, divided by the zoom."""
     assert surface_to_world(view(), 110, 40) == (5.0, 25.0)
 
 
-def test_drag_pans_by_the_pixel_distance_over_zoom(surface):
+def test_drag_pans_by_the_pixel_distance_over_zoom(surface: FakeSurface) -> None:
     """Move the centre against the drag, by pixels over zoom."""
     v = view()
     attach(v, surface)
@@ -30,7 +36,7 @@ def test_drag_pans_by_the_pixel_distance_over_zoom(surface):
     assert v.camera.center == (5.0, 10.0)
 
 
-def test_wheel_zooms_about_the_pointer(surface):
+def test_wheel_zooms_about_the_pointer(surface: FakeSurface) -> None:
     """Zoom in on a wheel turn away from the user, fixing the point under it."""
     v = view()
     attach(v, surface)
@@ -40,7 +46,7 @@ def test_wheel_zooms_about_the_pointer(surface):
     assert surface_to_world(v, 150, 20) == pytest.approx(before)
 
 
-def test_camera_flags_switch_pan_and_zoom_off(surface):
+def test_camera_flags_switch_pan_and_zoom_off(surface: FakeSurface) -> None:
     """Leave the camera alone while mouse_pan and mouse_zoom are false."""
     v = view()
     v.camera.mouse_pan = v.camera.mouse_zoom = False
@@ -51,7 +57,7 @@ def test_camera_flags_switch_pan_and_zoom_off(surface):
     assert (v.camera.center, v.camera.zoom) == ((10.0, 20.0), 2.0)
 
 
-def test_resize_updates_canvas_size(surface):
+def test_resize_updates_canvas_size(surface: FakeSurface) -> None:
     """Write the surface's logical size into the view."""
     v = view()
     attach(v, surface)
@@ -61,7 +67,7 @@ def test_resize_updates_canvas_size(surface):
     assert v.canvas_size == (300, 150)
 
 
-def test_zero_sized_surface_moves_nothing(surface):
+def test_zero_sized_surface_moves_nothing(surface: FakeSurface) -> None:
     """Ignore input on a surface with no area."""
     v = view(size=(0, 0))
     attach(v, surface)
@@ -71,7 +77,7 @@ def test_zero_sized_surface_moves_nothing(surface):
     assert (v.camera.center, v.camera.zoom) == ((10.0, 20.0), 2.0)
 
 
-def test_mouse_pan_switched_off_mid_drag_does_not_jump(surface):
+def test_mouse_pan_switched_off_mid_drag_does_not_jump(surface: FakeSurface) -> None:
     """Resume panning from the latest pointer position after mouse_pan is back on."""
     v = view()
     attach(v, surface)
@@ -83,7 +89,7 @@ def test_mouse_pan_switched_off_mid_drag_does_not_jump(surface):
     assert v.camera.center == (5.0, 15.0)
 
 
-def test_right_button_drag_does_not_pan(surface):
+def test_right_button_drag_does_not_pan(surface: FakeSurface) -> None:
     """Pan only on the left button."""
     v = view()
     attach(v, surface)
@@ -93,7 +99,7 @@ def test_right_button_drag_does_not_pan(surface):
     assert v.camera.center == (10.0, 20.0)
 
 
-def test_release_without_press_changes_nothing(surface):
+def test_release_without_press_changes_nothing(surface: FakeSurface) -> None:
     """Ignore a release and a following move that no press started."""
     v = view()
     attach(v, surface)
@@ -102,7 +108,7 @@ def test_release_without_press_changes_nothing(surface):
     assert v.camera.center == (10.0, 20.0)
 
 
-def test_release_of_another_button_keeps_the_drag(surface):
+def test_release_of_another_button_keeps_the_drag(surface: FakeSurface) -> None:
     """End a left drag only on the release of the left button."""
     v = view()
     attach(v, surface)
@@ -112,9 +118,9 @@ def test_release_of_another_button_keeps_the_drag(surface):
     assert v.camera.center == (5.0, 10.0)
 
 
-def test_hidden_layer_does_not_stop_panning(surface):
+def test_hidden_layer_does_not_stop_panning(surface: FakeSurface) -> None:
     """Pan a view whose only layer is not visible."""
-    v, layer, _ = view_with_image()
+    v, layer = view_with_image()
     layer.visible = False
     v.camera.zoom, v.camera.center = 2.0, (10.0, 20.0)
     attach(v, surface)
@@ -123,12 +129,12 @@ def test_hidden_layer_does_not_stop_panning(surface):
     assert v.camera.center == (5.0, 10.0)
 
 
-def test_handled_release_still_ends_the_drag(surface):
+def test_handled_release_still_ends_the_drag(surface: FakeSurface) -> None:
     """End the drag on a handled release, so a later hover does not pan."""
-    v, layer, _ = view_with_image()
+    v, layer = view_with_image()
     v.camera.zoom, v.camera.center = 2.0, (10.0, 20.0)
 
-    def claim_release(lyr, event):
+    def claim_release(lyr: Image, event: ButtonEvent) -> Generator[None, None, None]:
         while event.type != "mouse_release":
             yield
         event.handled = True
@@ -141,12 +147,12 @@ def test_handled_release_still_ends_the_drag(surface):
     assert v.camera.center == (10.0, 20.0)
 
 
-def test_handled_move_still_advances_the_drag(surface):
+def test_handled_move_still_advances_the_drag(surface: FakeSurface) -> None:
     """Pan on the next move only by the distance since the handled move."""
-    v, layer, _ = view_with_image()
+    v, layer = view_with_image()
     v.camera.zoom, v.camera.center = 2.0, (10.0, 20.0)
 
-    def claim_first_move(lyr, event):
+    def claim_first_move(lyr: Image, event: ButtonEvent) -> Generator[None, None, None]:
         yield
         event.handled = True
         yield
@@ -160,7 +166,9 @@ def test_handled_move_still_advances_the_drag(surface):
 
 
 @pytest.mark.parametrize("dy", [1e10, -1e10, float("inf"), float("nan")])
-def test_wheel_step_that_breaks_the_zoom_is_skipped(surface, dy):
+def test_wheel_step_that_breaks_the_zoom_is_skipped(
+    surface: FakeSurface, dy: float
+) -> None:
     """Leave zoom and centre alone when the new zoom is not finite and positive."""
     v = view()
     attach(v, surface)

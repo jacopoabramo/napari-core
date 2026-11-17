@@ -1,10 +1,13 @@
 """Shared test fixtures."""
 
+# pyright: reportMissingTypeStubs=false, reportUnknownVariableType=false
+
 from importlib import import_module
 
 import pytest
 from helpers import FakeSurface
-from vispy.app import Application, use_app
+from PyQt6.QtWidgets import QApplication
+from vispy.app import use_app
 
 
 @pytest.fixture
@@ -28,12 +31,14 @@ def surface() -> FakeSurface:
 
 
 @pytest.fixture(scope="session")
-def qapp() -> Application:
-    """Return the vispy application on the PyQt6 backend, once per process.
+def qapp() -> QApplication:
+    """Return the Qt application that vispy uses on PyQt6, once per process.
 
     A Qt application can exist only once per process, so it is shared.
     """
     try:
-        return use_app("pyqt6")
+        app = use_app("pyqt6").native
     except (ImportError, RuntimeError) as error:
         pytest.skip(f"no PyQt6 backend for vispy: {error}")
+    assert isinstance(app, QApplication)
+    return app

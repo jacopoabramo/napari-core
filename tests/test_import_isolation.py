@@ -2,7 +2,7 @@ import subprocess
 import sys
 
 
-def test_core_imports_no_renderer_gui_or_dask():
+def test_core_imports_no_renderer_gui_or_dask() -> None:
     """Import the core in a fresh interpreter without loading vispy, Qt or dask."""
     code = (
         "import sys, napari_core.model, napari_core.render,"
@@ -17,7 +17,7 @@ def test_core_imports_no_renderer_gui_or_dask():
     assert result.stdout.strip() == "[]"
 
 
-def test_vispy_backend_imports_no_qt_binding():
+def test_vispy_backend_imports_no_qt_binding() -> None:
     """Import the vispy backend in a fresh interpreter without loading a Qt binding."""
     code = (
         "import sys, napari_core.render.vispy;"

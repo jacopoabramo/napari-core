@@ -1,20 +1,20 @@
 import gc
 import logging
 import weakref
+from collections.abc import Callable
 
 import numpy as np
 import numpy.typing as npt
 import pytest
+from helpers import assign, image, qtest
 from PyQt6 import sip
 from PyQt6.QtCore import QCoreApplication, QEvent, QPoint, QPointF, Qt
 from PyQt6.QtGui import QImage, QWheelEvent
-from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QWidget
-from vispy.app import Application
-from vispy.scene import SceneCanvas
 
 from napari_core.interaction import attach
 from napari_core.model import (
+    COLORMAPS,
     Camera,
     Image,
     IntensityAppearance,
@@ -22,7 +22,12 @@ from napari_core.model import (
     Transform,
     ViewerModel,
 )
-from napari_core.render import RenderSurface, SurfaceEvent, create_layer_adapter
+from napari_core.render import (
+    LayerAdapter,
+    RenderSurface,
+    SurfaceEvent,
+    create_layer_adapter,
+)
 from napari_core.render.vispy import VispyBackend
 
 pytestmark = pytest.mark.gl
@@ -59,20 +64,20 @@ def undrawable() -> Undrawable:
 
 def white_image() -> Image:
     """Return a 50 by 50 image whose pixels all map to white."""
-    return Image(
+    return image(
         name="a",
         data=np.full((50, 50), 255, dtype=np.uint8),
         appearance=IntensityAppearance(contrast_limits=(0.0, 255.0)),
     )
 
 
-def shown(viewer: ViewerModel, qapp: Application) -> RenderSurface[QWidget]:
+def shown(viewer: ViewerModel, qapp: QApplication) -> RenderSurface[QWidget]:
     """Return a surface of the viewer's view, shown at 200 by 100 pixels."""
     surface = VispyBackend[QWidget]().create_surface(viewer.view, None)
     viewer.view.canvas_size = (200, 100)
     surface.native.resize(200, 100)
     surface.native.show()
-    qapp.process_events()
+    qapp.processEvents()
     return surface
 
 
@@ -86,12 +91,11 @@ def grab(native: QWidget) -> npt.NDArray[np.uint8]:
     image = native.grab().toImage().convertToFormat(QImage.Format.Format_RGBA8888)
     bits = image.constBits()
     assert bits is not None
-    bits.setsize(image.sizeInBytes())
-    pixels = np.frombuffer(bits, dtype=np.uint8)
+    pixels = np.frombuffer(bits.asstring(image.sizeInBytes()), dtype=np.uint8)
     return pixels.reshape(image.height(), image.width(), 4).copy()
 
 
-def test_image_is_drawn(qapp: Application) -> None:
+def test_image_is_drawn(qapp: QApplication) -> None:
     """Draw a white image so the middle of the screenshot is not background."""
     viewer = ViewerModel()
     viewer.layers.append(white_image())
@@ -103,7 +107,7 @@ def test_image_is_drawn(qapp: Application) -> None:
     surface.close()
 
 
-def test_hidden_layer_is_not_drawn(qapp: Application) -> None:
+def test_hidden_layer_is_not_drawn(qapp: QApplication) -> None:
     """Draw nothing for a layer that is not visible."""
     viewer = ViewerModel()
     layer = white_image()
@@ -112,12 +116,12 @@ def test_hidden_layer_is_not_drawn(qapp: Application) -> None:
     surface = shown(viewer, qapp)
     assert middle(surface.screenshot()) != BACKGROUND
     layer.visible = False
-    qapp.process_events()
+    qapp.processEvents()
     assert middle(surface.screenshot()) == BACKGROUND
     surface.close()
 
 
-def test_camera_change_moves_the_image(qapp: Application) -> None:
+def test_camera_change_moves_the_image(qapp: QApplication) -> None:
     """Follow the model camera, so panning far away leaves the middle empty."""
     viewer = ViewerModel()
     viewer.layers.append(white_image())
@@ -125,13 +129,13 @@ def test_camera_change_moves_the_image(qapp: Application) -> None:
     surface = shown(viewer, qapp)
     assert middle(surface.screenshot()) != BACKGROUND
     viewer.camera.center = (10_000.0, 10_000.0)
-    qapp.process_events()
+    qapp.processEvents()
     assert middle(surface.screenshot()) == BACKGROUND
     surface.close()
 
 
 def test_surface_follows_the_camera_after_a_refused_replacement(
-    qapp: Application,
+    qapp: QApplication,
 ) -> None:
     """Keep following the camera's fields after assigning a new camera failed."""
     viewer = ViewerModel()
@@ -139,14 +143,14 @@ def test_surface_follows_the_camera_after_a_refused_replacement(
     viewer.camera.center = (25.0, 25.0)
     surface = shown(viewer, qapp)
     with pytest.raises(ValueError, match="frozen"):
-        viewer.view.camera = Camera(center=(10_000.0, 10_000.0))
+        assign(viewer.view, "camera", Camera(center=(10_000.0, 10_000.0)))
     assert middle(surface.screenshot()) != BACKGROUND
     viewer.camera.center = (10_000.0, 10_000.0)
     assert middle(surface.screenshot()) == BACKGROUND
     surface.close()
 
 
-def test_removed_layer_disappears(qapp: Application) -> None:
+def test_removed_layer_disappears(qapp: QApplication) -> None:
     """Remove a layer's visual when the layer leaves the list."""
     viewer = ViewerModel()
     layer = white_image()
@@ -156,12 +160,15 @@ def test_removed_layer_disappears(qapp: Application) -> None:
     assert middle(surface.screenshot()) != BACKGROUND
     viewer.layers.remove(layer)
     layer.gamma = 0.5
-    qapp.process_events()
+    qapp.processEvents()
     assert middle(surface.screenshot()) == BACKGROUND
     surface.close()
 
 
-def test_closed_adapter_ignores_the_layer(qapp: Application) -> None:
+def test_closed_adapter_ignores_the_layer(
+    qapp: QApplication,
+    visual_state: Callable[[LayerAdapter], tuple[float, tuple[float, float]]],
+) -> None:
     """Keep the visual as it was when the adapter closed, whatever changes."""
     viewer = ViewerModel()
     layer = white_image()
@@ -170,28 +177,27 @@ def test_closed_adapter_ignores_the_layer(qapp: Application) -> None:
     adapter.close()
     layer.gamma = 0.5
     layer.contrast_limits = (10.0, 20.0)
-    assert adapter.visual.gamma == 1.0
-    assert tuple(adapter.visual.clim) == (0.0, 255.0)
+    assert visual_state(adapter) == (1.0, (0.0, 255.0))
 
 
-def test_layer_added_later_is_drawn(qapp: Application) -> None:
+def test_layer_added_later_is_drawn(qapp: QApplication) -> None:
     """Draw a layer appended after the surface exists."""
     viewer = ViewerModel()
     viewer.camera.center = (25.0, 25.0)
     surface = shown(viewer, qapp)
     viewer.layers.append(white_image())
-    qapp.process_events()
+    qapp.processEvents()
     assert middle(surface.screenshot()) != BACKGROUND
     surface.close()
 
 
-def test_image_orientation_and_pixel_centres(qapp: Application) -> None:
+def test_image_orientation_and_pixel_centres(qapp: QApplication) -> None:
     """Put row 0 at the top, column 0 at the left and pixel (0, 0) on world (0, 0)."""
     data = np.zeros((3, 3), dtype=np.uint8)
     data[0, 0] = 255
     viewer = ViewerModel()
     viewer.layers.append(
-        Image(
+        image(
             name="a",
             data=data,
             appearance=IntensityAppearance(contrast_limits=(0.0, 255.0)),
@@ -231,7 +237,7 @@ def turn_wheel_away(native: QWidget, notches: int) -> None:
     QApplication.sendEvent(native, event)
 
 
-def test_wheel_away_from_the_user_zooms_in(qapp: Application) -> None:
+def test_wheel_away_from_the_user_zooms_in(qapp: QApplication) -> None:
     """Report a wheel notch away from the user as dy of -120, which zooms in."""
     viewer = ViewerModel()
     surface = shown(viewer, qapp)
@@ -246,40 +252,40 @@ def test_wheel_away_from_the_user_zooms_in(qapp: Application) -> None:
     surface.close()
 
 
-def test_resize_of_the_widget_writes_the_canvas_size(qapp: Application) -> None:
+def test_resize_of_the_widget_writes_the_canvas_size(qapp: QApplication) -> None:
     """Write the widget's new logical size into the view of an attached surface."""
     viewer = ViewerModel()
     surface = shown(viewer, qapp)
     attach(viewer.view, surface)
     surface.native.resize(300, 150)
-    qapp.process_events()
+    qapp.processEvents()
     assert viewer.view.canvas_size == (300, 150)
     surface.close()
 
 
-def test_unattached_surface_keeps_the_default_canvas_size(qapp: Application) -> None:
+def test_unattached_surface_keeps_the_default_canvas_size(qapp: QApplication) -> None:
     """Leave the view's canvas size alone when no dispatcher is attached."""
     viewer = ViewerModel()
     default = viewer.view.canvas_size
     surface = VispyBackend[QWidget]().create_surface(viewer.view, None)
     surface.native.resize(300, 150)
     surface.native.show()
-    qapp.process_events()
+    qapp.processEvents()
     assert surface.get_logical_size() == (300.0, 150.0)
     assert viewer.view.canvas_size == default
     surface.close()
 
 
 def test_mouse_press_reaches_handlers_in_rendercanvas_vocabulary(
-    qapp: Application,
+    qapp: QApplication,
 ) -> None:
     """Translate a real Qt mouse press into a pointer_down surface event."""
     viewer = ViewerModel()
     surface = shown(viewer, qapp)
-    seen = []
+    seen: list[SurfaceEvent] = []
     surface.add_event_handler(seen.append, "pointer_down")
     # Presses are not coalesced, so the handler has run when mousePress returns.
-    QTest.mousePress(surface.native, Qt.MouseButton.LeftButton, pos=QPoint(30, 40))
+    qtest.mousePress(surface.native, Qt.MouseButton.LeftButton, pos=QPoint(30, 40))
     (event,) = seen
     assert event["event_type"] == "pointer_down"
     assert (event["x"], event["y"], event["button"]) == (30.0, 40.0, 1)
@@ -287,7 +293,7 @@ def test_mouse_press_reaches_handlers_in_rendercanvas_vocabulary(
 
 
 def test_replaced_appearance_is_drawn_and_the_old_one_is_not_followed(
-    qapp: Application,
+    qapp: QApplication,
 ) -> None:
     """Show a replacement appearance, follow its fields and ignore the old one's."""
     viewer = ViewerModel()
@@ -297,17 +303,19 @@ def test_replaced_appearance_is_drawn_and_the_old_one_is_not_followed(
     surface = shown(viewer, qapp)
     old = layer.appearance
     assert middle(surface.screenshot()) == WHITE
-    layer.appearance = IntensityAppearance(colormap="red", contrast_limits=(0.0, 255.0))
+    layer.appearance = IntensityAppearance(
+        colormap=COLORMAPS["red"], contrast_limits=(0.0, 255.0)
+    )
     assert middle(surface.screenshot()) == RED
-    old.colormap = "green"
+    old.colormap = COLORMAPS["green"]
     assert middle(surface.screenshot()) == RED
-    layer.appearance.colormap = "blue"
+    layer.appearance.colormap = COLORMAPS["blue"]
     assert middle(surface.screenshot()) == BLUE
     surface.close()
 
 
 def test_replaced_transform_is_drawn_and_the_old_one_is_not_followed(
-    qapp: Application,
+    qapp: QApplication,
 ) -> None:
     """Place by a replacement transform, follow its fields and ignore the old one's."""
     viewer = ViewerModel()
@@ -328,7 +336,7 @@ def test_replaced_transform_is_drawn_and_the_old_one_is_not_followed(
 
 
 def test_transform_places_the_centre_of_pixel_zero_at_translate(
-    qapp: Application,
+    qapp: QApplication,
 ) -> None:
     """Centre pixel (0, 0) on the translation when the scale is not 1."""
     data = np.zeros((3, 3), dtype=np.uint8)
@@ -360,33 +368,23 @@ def test_transform_places_the_centre_of_pixel_zero_at_translate(
 
 
 def test_failed_surface_closes_its_canvas_and_logs_no_error(
-    qapp: Application,
-    monkeypatch: pytest.MonkeyPatch,
+    qapp: QApplication,
+    closed_canvases: list[object],
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Close the canvas quietly when a layer has no adapter and the surface fails."""
-    closed: list[SceneCanvas] = []
-
-    class RecordingCanvas(SceneCanvas):
-        def close(self) -> None:
-            closed.append(self)
-            super().close()
-
-    monkeypatch.setattr(
-        "napari_core.render.vispy._surface.SceneCanvas", RecordingCanvas
-    )
     viewer = ViewerModel()
     viewer.layers.append(undrawable())
     caplog.set_level(logging.ERROR)
     caplog.set_level(logging.ERROR, logger="vispy")
     with pytest.raises(LookupError):
         VispyBackend[QWidget]().create_surface(viewer.view, None)
-    assert len(closed) == 1
+    assert len(closed_canvases) == 1
     assert not caplog.records
 
 
 def test_undrawable_layer_appended_later_is_logged_and_skipped(
-    qapp: Application, caplog: pytest.LogCaptureFixture
+    qapp: QApplication, caplog: pytest.LogCaptureFixture
 ) -> None:
     """Log a later undrawable layer once and keep drawing the others."""
     viewer = ViewerModel()
@@ -396,7 +394,7 @@ def test_undrawable_layer_appended_later_is_logged_and_skipped(
     layer = undrawable()
     viewer.layers.append(layer)
     viewer.layers.append(white_image())
-    qapp.process_events()
+    qapp.processEvents()
     assert middle(surface.screenshot()) == WHITE
     (record,) = caplog.records
     assert "'p'" in record.getMessage() and "Undrawable" in record.getMessage()
@@ -407,7 +405,7 @@ def test_undrawable_layer_appended_later_is_logged_and_skipped(
 
 
 def test_equal_replacement_appearance_is_followed_and_the_old_one_is_not(
-    qapp: Application,
+    qapp: QApplication,
 ) -> None:
     """Follow a replacement appearance that equals the old one."""
     viewer = ViewerModel()
@@ -418,15 +416,15 @@ def test_equal_replacement_appearance_is_followed_and_the_old_one_is_not(
     old = layer.appearance
     layer.appearance = old.model_copy()
     assert layer.appearance == old and layer.appearance is not old
-    old.colormap = "green"
+    old.colormap = COLORMAPS["green"]
     assert middle(surface.screenshot()) == WHITE
-    layer.appearance.colormap = "blue"
+    layer.appearance.colormap = COLORMAPS["blue"]
     assert middle(surface.screenshot()) == BLUE
     surface.close()
 
 
 def test_equal_replacement_transform_is_followed_and_the_old_one_is_not(
-    qapp: Application,
+    qapp: QApplication,
 ) -> None:
     """Follow a replacement transform that equals the old one."""
     viewer = ViewerModel()
@@ -445,7 +443,7 @@ def test_equal_replacement_transform_is_followed_and_the_old_one_is_not(
 
 
 def only_native(
-    viewer: ViewerModel, qapp: Application, seen: list[SurfaceEvent]
+    viewer: ViewerModel, qapp: QApplication, seen: list[SurfaceEvent]
 ) -> QWidget:
     """Return the native widget of a shown, attached surface that is then dropped."""
     surface = shown(viewer, qapp)
@@ -454,7 +452,7 @@ def only_native(
     return surface.native
 
 
-def test_surface_works_while_only_its_widget_is_kept(qapp: Application) -> None:
+def test_surface_works_while_only_its_widget_is_kept(qapp: QApplication) -> None:
     """Keep following the model, reaching handlers and panning without the surface."""
     viewer = ViewerModel()
     viewer.layers.append(white_image())
@@ -464,22 +462,22 @@ def test_surface_works_while_only_its_widget_is_kept(qapp: Application) -> None:
     gc.collect()
     assert middle(grab(native)) != BACKGROUND
     viewer.camera.center = (10_000.0, 10_000.0)
-    qapp.process_events()
+    qapp.processEvents()
     assert middle(grab(native)) == BACKGROUND
     viewer.camera.center = (25.0, 25.0)
-    QTest.mousePress(native, Qt.MouseButton.LeftButton, pos=QPoint(30, 40))
+    qtest.mousePress(native, Qt.MouseButton.LeftButton, pos=QPoint(30, 40))
     assert [event["event_type"] for event in seen] == ["pointer_down"]
-    QTest.mouseMove(native, QPoint(30, 40))
+    qtest.mouseMove(native, QPoint(30, 40))
     for offset in range(1, 6):
-        QTest.mouseMove(native, QPoint(30 + 4 * offset, 40))
-        QTest.qWait(20)
-    QTest.mouseRelease(native, Qt.MouseButton.LeftButton, pos=QPoint(50, 40))
+        qtest.mouseMove(native, QPoint(30 + 4 * offset, 40))
+        qtest.qWait(20)
+    qtest.mouseRelease(native, Qt.MouseButton.LeftButton, pos=QPoint(50, 40))
     assert viewer.camera.center[1] < 25.0
     native.close()
     native.deleteLater()
 
 
-def test_closed_surface_is_freed_and_ignores_the_model(qapp: Application) -> None:
+def test_closed_surface_is_freed_and_ignores_the_model(qapp: QApplication) -> None:
     """Free a closed surface once nothing refers to it and ignore later changes."""
     viewer = ViewerModel()
     viewer.layers.append(white_image())
@@ -494,7 +492,7 @@ def test_closed_surface_is_freed_and_ignores_the_model(qapp: Application) -> Non
     viewer.layers.clear()
 
 
-def test_close_deletes_the_native_widget(qapp: Application) -> None:
+def test_close_deletes_the_native_widget(qapp: QApplication) -> None:
     """Have Qt delete the widget of a closed surface at its next deferred delete."""
     surface = shown(ViewerModel(), qapp)
     native = surface.native
@@ -505,7 +503,7 @@ def test_close_deletes_the_native_widget(qapp: Application) -> None:
 
 
 def test_widget_close_keeps_the_surface_until_it_is_closed(
-    qapp: Application,
+    qapp: QApplication,
 ) -> None:
     """Keep a dropped surface reacting after the widget's close, until it is closed."""
     viewer = ViewerModel()

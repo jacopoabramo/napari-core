@@ -59,12 +59,14 @@ markers = ["gl: needs OpenGL and a Qt binding"]
 
 [tool.pyright]
 typeCheckingMode = "strict"
-include = ["src", "tests/static"]
+include = ["src", "tests"]
+extraPaths = ["tests"]
 reportUnnecessaryTypeIgnoreComment = "error"
 
 [tool.pyrefly]
 preset = "strict"
-project-includes = ["src", "tests/static"]
+project-includes = ["src", "tests"]
+search-path = ["tests"]
 
 [tool.importlinter]
 root_package = "napari_core"

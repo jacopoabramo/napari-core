@@ -1,32 +1,41 @@
 from typing import Annotated, ClassVar
 
-import dask.array as da
 import numpy as np
+import numpy.typing as npt
 import pytest
+from helpers import assign, da, image
+from psygnal import SignalInstance
 
 from napari_core.data import as_layer_data
-from napari_core.model import COLORMAPS, Dims, Image, Layer, Transform
-from napari_core.typing import SliceArray
+from napari_core.model import (
+    COLORMAPS,
+    Dims,
+    Image,
+    IntensityAppearance,
+    Layer,
+    Transform,
+)
+from napari_core.typing import LayerDataProtocol, SliceArray
 
 
-def stack():
+def stack() -> npt.NDArray[np.uint8]:
     """Return a small 3D array."""
     return np.arange(2 * 3 * 4, dtype=np.uint8).reshape(2, 3, 4)
 
 
-def test_image_fills_in_transform_and_appearance():
+def test_image_fills_in_transform_and_appearance() -> None:
     """Give a new image an identity transform, gray colormap and data limits."""
-    layer = Image(name="a", data=stack())
+    layer = image(name="a", data=stack())
     assert layer.scale == (1.0, 1.0, 1.0)
     assert layer.translate == (0.0, 0.0, 0.0)
     assert layer.colormap.name == "gray"
     assert layer.contrast_limits == (0.0, 23.0)
 
 
-def test_shortcuts_write_through_to_components():
+def test_shortcuts_write_through_to_components() -> None:
     """Emit the component's signal when a shortcut property is set."""
-    layer = Image(name="a", data=stack())
-    seen = []
+    layer = image(name="a", data=stack())
+    seen: list[float] = []
     layer.appearance.events.gamma.connect(seen.append)
     layer.gamma = 0.5
     assert seen == [0.5]
@@ -35,14 +44,14 @@ def test_shortcuts_write_through_to_components():
     layer.colormap = "blue"
     assert layer.colormap.name == "blue"
 
-    changes = {
+    changes: dict[str, tuple[object, SignalInstance]] = {
         "colormap": (COLORMAPS["red"], layer.appearance.events.colormap),
         "contrast_limits": ((1.0, 5.0), layer.appearance.events.contrast_limits),
         "scale": ((2.0, 2.0, 2.0), layer.transform.events.scale),
         "translate": ((1.0, 0.0, 0.0), layer.transform.events.translate),
     }
     for name, (value, signal) in changes.items():
-        emitted = []
+        emitted: list[object] = []
         signal.connect(emitted.append)
         setattr(layer, name, value)
         assert len(emitted) == 1, name
@@ -50,26 +59,26 @@ def test_shortcuts_write_through_to_components():
     assert layer.transform.scale == (2.0, 2.0, 2.0)
 
 
-def test_invalid_data_is_refused_on_assignment():
+def test_invalid_data_is_refused_on_assignment() -> None:
     """Raise the validation error of as_layer_data when data is assigned."""
-    layer = Image(name="a", data=stack())
+    layer = image(name="a", data=stack())
     with pytest.raises(TypeError, match="dtype"):
-        layer.data = [1, 2, 3]
+        assign(layer, "data", [1, 2, 3])
 
 
-def test_assigning_equal_but_distinct_data_emits():
+def test_assigning_equal_but_distinct_data_emits() -> None:
     """Compare data by identity, so a new array always emits."""
-    layer = Image(name="a", data=stack())
-    seen = []
+    layer = image(name="a", data=stack())
+    seen: list[LayerDataProtocol] = []
     layer.events.data.connect(seen.append)
     layer.data = stack()
     assert len(seen) == 1
 
 
-def test_assigning_the_same_data_does_not_emit():
+def test_assigning_the_same_data_does_not_emit() -> None:
     """Stay silent when the very same array is assigned again."""
-    layer = Image(name="a", data=stack())
-    seen = []
+    layer = image(name="a", data=stack())
+    seen: list[LayerDataProtocol] = []
     layer.events.data.connect(seen.append)
     layer.data = layer.data
     assert seen == []
@@ -79,50 +88,52 @@ def test_assigning_the_same_data_does_not_emit():
     ("step", "expected"),
     [((0, 0, 0), 0), ((1, 0, 0), 1), ((7, 0, 0), 1)],
 )
-def test_slice_follows_the_step_and_stops_at_the_last_plane(step, expected):
+def test_slice_follows_the_step_and_stops_at_the_last_plane(
+    step: tuple[int, ...], expected: int
+) -> None:
     """Slice the plane of the step, or the last plane when the step is past it."""
-    layer = Image(name="a", data=stack())
+    layer = image(name="a", data=stack())
     dims = Dims(ndim=3, nsteps=(8, 3, 4), current_step=step)
     np.testing.assert_array_equal(layer.slice(dims), stack()[expected])
 
 
-def test_layer_with_fewer_axes_aligns_to_the_last_axes():
+def test_layer_with_fewer_axes_aligns_to_the_last_axes() -> None:
     """Ignore the leading axes of the view that a 2D image does not have."""
     plane = np.ones((3, 4), dtype=np.uint8)
-    layer = Image(name="a", data=plane)
+    layer = image(name="a", data=plane)
     dims = Dims(ndim=3, nsteps=(8, 3, 4), current_step=(5, 0, 0))
     assert layer.slice_key(dims) == (slice(None), slice(None))
     np.testing.assert_array_equal(layer.slice(dims), plane)
 
 
-def test_constant_image_gets_distinct_contrast_limits():
+def test_constant_image_gets_distinct_contrast_limits() -> None:
     """Give an image of one value limits that differ."""
-    layer = Image(name="a", data=np.full((3, 4), 7, dtype=np.uint8))
+    layer = image(name="a", data=np.full((3, 4), 7, dtype=np.uint8))
     low, high = layer.contrast_limits
     assert low == 7.0
     assert high > low
 
 
-def test_callbacks_are_kept_per_layer():
+def test_callbacks_are_kept_per_layer() -> None:
     """Keep each layer's callback list separate."""
-    first, second = Image(name="a", data=stack()), Image(name="b", data=stack())
+    first, second = image(name="a", data=stack()), image(name="b", data=stack())
     first.mouse_drag_callbacks.append(lambda layer, event: None)
     assert len(first.mouse_drag_callbacks) == 1
     assert second.mouse_drag_callbacks == []
 
 
-def test_transform_with_the_wrong_length_is_refused():
+def test_transform_with_the_wrong_length_is_refused() -> None:
     """Name both lengths when a transform does not match the data's axes."""
     transform = Transform(scale=(1.0, 1.0), translate=(0.0, 0.0))
     with pytest.raises(ValueError, match="3 axes.*2 scale and 2 translate"):
         Image(name="a", data=stack(), transform=transform)
 
 
-def test_refused_data_assignment_leaves_the_image_unchanged():
+def test_refused_data_assignment_leaves_the_image_unchanged() -> None:
     """Refuse data of another ndim, keep the old data and emit nothing."""
     data = stack()
-    layer = Image(name="a", data=data)
-    seen = []
+    layer = image(name="a", data=data)
+    seen: list[LayerDataProtocol] = []
     layer.events.data.connect(seen.append)
     with pytest.raises(ValueError, match="2 axes.*3 scale"):
         layer.data = np.zeros((3, 4))
@@ -133,11 +144,11 @@ def test_refused_data_assignment_leaves_the_image_unchanged():
     assert len(seen) == 1
 
 
-def test_refused_transform_assignment_leaves_the_image_unchanged():
+def test_refused_transform_assignment_leaves_the_image_unchanged() -> None:
     """Refuse a transform of the wrong length and keep the old one."""
-    layer = Image(name="a", data=stack())
+    layer = image(name="a", data=stack())
     old = layer.transform
-    seen = []
+    seen: list[Transform] = []
     layer.events.transform.connect(seen.append)
     with pytest.raises(ValueError, match="3 axes.*2 scale"):
         layer.transform = Transform(scale=(1.0, 1.0), translate=(0.0, 0.0))
@@ -148,17 +159,19 @@ def test_refused_transform_assignment_leaves_the_image_unchanged():
 
 
 @pytest.mark.parametrize("data", [np.zeros(()), np.zeros(3)])
-def test_image_with_fewer_than_two_axes_is_refused(data):
+def test_image_with_fewer_than_two_axes_is_refused(
+    data: npt.NDArray[np.float64],
+) -> None:
     """Refuse data of 0 or 1 axes on construction, naming the number found."""
     with pytest.raises(ValueError, match=f"at least 2 axes, data has {data.ndim}"):
-        Image(name="a", data=data)
+        image(name="a", data=data)
 
 
-def test_assigning_data_with_one_axis_is_refused():
+def test_assigning_data_with_one_axis_is_refused() -> None:
     """Refuse 1-D data on assignment, keep the old data and emit nothing."""
     data = np.zeros((3, 4))
-    layer = Image(name="a", data=data)
-    seen = []
+    layer = image(name="a", data=data)
+    seen: list[LayerDataProtocol] = []
     layer.events.data.connect(seen.append)
     with pytest.raises(ValueError, match="at least 2 axes, data has 1"):
         layer.data = np.zeros(3)
@@ -166,20 +179,20 @@ def test_assigning_data_with_one_axis_is_refused():
     assert seen == []
 
 
-def test_gamma_shortcut_refuses_a_value_that_is_not_positive():
+def test_gamma_shortcut_refuses_a_value_that_is_not_positive() -> None:
     """Refuse a gamma of zero or less through the shortcut and keep the old one."""
-    layer = Image(name="a", data=stack())
+    layer = image(name="a", data=stack())
     with pytest.raises(ValueError, match="gamma"):
         layer.gamma = -1.0
     assert layer.gamma == 1.0
 
 
 @pytest.mark.parametrize("opacity", [-0.1, 1.1])
-def test_opacity_outside_zero_to_one_is_refused(opacity):
+def test_opacity_outside_zero_to_one_is_refused(opacity: float) -> None:
     """Refuse an opacity outside 0 to 1, on construction and on assignment."""
     with pytest.raises(ValueError, match="opacity"):
-        Image(name="a", data=stack(), opacity=opacity)
-    layer = Image(name="a", data=stack(), opacity=0.5)
+        image(name="a", data=stack(), opacity=opacity)
+    layer = image(name="a", data=stack(), opacity=0.5)
     with pytest.raises(ValueError, match="opacity"):
         layer.opacity = opacity
     assert layer.opacity == 0.5
@@ -188,11 +201,11 @@ def test_opacity_outside_zero_to_one_is_refused(opacity):
 
 
 @pytest.mark.parametrize("name", ["scale", "translate"])
-def test_shortcut_refuses_a_length_other_than_the_number_of_axes(name):
+def test_shortcut_refuses_a_length_other_than_the_number_of_axes(name: str) -> None:
     """Name both numbers, store nothing and emit nothing for a wrong length."""
-    layer = Image(name="a", data=stack())
+    layer = image(name="a", data=stack())
     before = layer.transform.model_copy()
-    seen = []
+    seen: list[object] = []
     layer.transform.events.connect(seen.append)
     with pytest.raises(ValueError, match="3 axes.*1 entries"):
         setattr(layer, name, (2.0,))
@@ -200,36 +213,39 @@ def test_shortcut_refuses_a_length_other_than_the_number_of_axes(name):
     assert seen == []
 
 
-def test_slice_key_refuses_dims_with_fewer_axes():
+def test_slice_key_refuses_dims_with_fewer_axes() -> None:
     """Raise when the layer has more axes than the dims."""
-    layer = Image(name="a", data=stack())
+    layer = image(name="a", data=stack())
     with pytest.raises(ValueError, match="3.*2"):
         layer.slice_key(Dims(ndim=2))
 
 
-def test_contrast_limits_come_from_the_finite_values():
+def test_contrast_limits_come_from_the_finite_values() -> None:
     """Ignore NaN when taking the limits."""
     data = np.array([[np.nan, 2.0], [5.0, np.inf]])
-    assert Image(name="a", data=data).contrast_limits == (2.0, 5.0)
+    assert image(name="a", data=data).contrast_limits == (2.0, 5.0)
 
 
 @pytest.mark.parametrize("data", [np.full((2, 2), np.nan), np.zeros((0, 3))])
-def test_contrast_limits_fall_back_without_finite_values(data):
+def test_contrast_limits_fall_back_without_finite_values(
+    data: npt.NDArray[np.float64],
+) -> None:
     """Use (0, 1) for all-NaN or empty data, without a numpy warning."""
-    assert Image(name="a", data=data).contrast_limits == (0.0, 1.0)
+    assert image(name="a", data=data).contrast_limits == (0.0, 1.0)
 
 
-def test_lazy_data_takes_limits_from_the_middle_plane_only():
+def test_lazy_data_takes_limits_from_the_middle_plane_only() -> None:
     """Read only the middle plane of dask data for the contrast limits."""
     data = as_layer_data(da.arange(120).reshape(2, 3, 4, 5))
-    assert Image(name="a", data=data).contrast_limits == (80.0, 99.0)
+    assert image(name="a", data=data).contrast_limits == (80.0, 99.0)
 
 
-def test_equal_but_distinct_components_replace_the_old_ones():
+def test_equal_but_distinct_components_replace_the_old_ones() -> None:
     """Emit for an equal component object that is a different object, not the same."""
-    layer = Image(name="a", data=stack())
+    layer = image(name="a", data=stack())
     appearance, transform = layer.appearance, layer.transform
-    seen_appearance, seen_transform = [], []
+    seen_appearance: list[IntensityAppearance] = []
+    seen_transform: list[Transform] = []
     layer.events.appearance.connect(seen_appearance.append)
     layer.events.transform.connect(seen_transform.append)
     layer.appearance = appearance
@@ -245,9 +261,9 @@ def test_equal_but_distinct_components_replace_the_old_ones():
     assert layer.appearance is new_appearance and layer.transform is new_transform
 
 
-def test_shortcut_setters_write_through_to_the_existing_components():
+def test_shortcut_setters_write_through_to_the_existing_components() -> None:
     """Keep the component objects when a shortcut property is set."""
-    layer = Image(name="a", data=stack())
+    layer = image(name="a", data=stack())
     appearance, transform = layer.appearance, layer.transform
     layer.colormap = "red"
     layer.contrast_limits = (1.0, 5.0)
@@ -321,10 +337,10 @@ def moving(transform: Transform) -> Transform:
     return transform.model_copy()
 
 
-def test_image_subclass_replaces_equal_components_by_object():
+def test_image_subclass_replaces_equal_components_by_object() -> None:
     """Emit once for an equal but distinct component and not for the same one."""
-    layer = Special(name="a", data=stack())
-    seen = []
+    layer = Special.model_validate({"name": "a", "data": stack()})
+    seen: list[IntensityAppearance | Transform] = []
     layer.events.appearance.connect(seen.append)
     layer.events.transform.connect(seen.append)
     layer.appearance, layer.transform = layer.appearance, layer.transform
@@ -334,11 +350,11 @@ def test_image_subclass_replaces_equal_components_by_object():
     assert len(seen) == 2
 
 
-def test_layer_that_is_not_an_image_replaces_equal_components_by_object():
+def test_layer_that_is_not_an_image_replaces_equal_components_by_object() -> None:
     """Compare every component of a new layer type, including its own, by object."""
     transform = Transform(scale=(1.0, 1.0), translate=(0.0, 0.0))
     layer = Plain(name="p", transform=transform, extra=transform.model_copy())
-    seen = []
+    seen: list[Transform] = []
     layer.events.transform.connect(seen.append)
     layer.events.extra.connect(seen.append)
     layer.transform, layer.extra = layer.transform, layer.extra
@@ -349,10 +365,10 @@ def test_layer_that_is_not_an_image_replaces_equal_components_by_object():
     assert seen == [new_transform, new_extra]
 
 
-def test_subclass_adds_identity_fields_and_keeps_those_of_its_parent():
+def test_subclass_adds_identity_fields_and_keeps_those_of_its_parent() -> None:
     """Replace a named field by object, and the data and components as well."""
-    layer = Tagged(name="a", data=stack())
-    seen = []
+    layer = Tagged.model_validate({"name": "a", "data": stack()})
+    seen: list[object] = []
     layer.events.token.connect(seen.append)
     layer.events.data.connect(seen.append)
     layer.events.appearance.connect(seen.append)
@@ -368,10 +384,12 @@ def test_subclass_adds_identity_fields_and_keeps_those_of_its_parent():
 
 
 @pytest.mark.parametrize("kind", [WithOptional, WithAnnotatedOptional])
-def test_optional_component_is_replaced_by_object(kind):
+def test_optional_component_is_replaced_by_object(
+    kind: type[WithOptional] | type[WithAnnotatedOptional],
+) -> None:
     """Emit for each new optional component or `None`, and not for the same object."""
-    layer = kind(name="a", data=stack())
-    seen = []
+    layer = kind.model_validate({"name": "a", "data": stack()})
+    seen: list[Transform | None] = []
     layer.events.extra.connect(seen.append)
     first = layer.transform.model_copy()
     second = moving(first)
@@ -380,20 +398,18 @@ def test_optional_component_is_replaced_by_object(kind):
     assert [id(value) for value in seen] == [id(first), id(second), id(None), id(first)]
 
 
-def test_list_of_components_is_compared_by_contents():
+def test_list_of_components_is_compared_by_contents() -> None:
     """Emit nothing when an equal list of other component objects is assigned."""
-    layer = WithList(name="a", data=stack())
+    layer = WithList.model_validate({"name": "a", "data": stack()})
     transform = layer.transform.model_copy()
-    seen = []
+    seen: list[list[Transform]] = []
     layer.events.extras.connect(seen.append)
     layer.extras = [transform]
     layer.extras = [moving(transform)]
     assert len(seen) == 1
 
 
-def test_identity_name_that_is_not_a_field_is_refused():
+def test_identity_name_that_is_not_a_field_is_refused() -> None:
     """Refuse a class whose `compared_by_identity` names a field it does not have."""
     with pytest.raises(TypeError, match="Misspelled.*'dta'"):
-
-        class Misspelled(Image):
-            compared_by_identity: ClassVar[tuple[str, ...]] = ("dta",)
+        type("Misspelled", (Image,), {"compared_by_identity": ("dta",)})

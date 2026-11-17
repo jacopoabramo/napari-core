@@ -4,12 +4,13 @@ import pytest
 from napari_core.typing import LayerDataProtocol
 
 
-def test_numpy_array_is_layer_data():
+def test_numpy_array_is_layer_data() -> None:
     """Accept a NumPy array as layer data."""
-    assert isinstance(np.zeros((2, 3)), LayerDataProtocol)
+    array: object = np.zeros((2, 3))
+    assert isinstance(array, LayerDataProtocol)
 
 
 @pytest.mark.parametrize("value", [[1, 2, 3], 5, "abc", None])
-def test_non_arrays_are_not_layer_data(value):
+def test_non_arrays_are_not_layer_data(value: object) -> None:
     """Reject values that lack the array members."""
     assert not isinstance(value, LayerDataProtocol)

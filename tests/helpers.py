@@ -1,6 +1,8 @@
 """Plain helpers shared between test modules."""
 
 from collections.abc import Callable
+from importlib import import_module
+from typing import Literal
 
 import numpy as np
 import numpy.typing as npt
@@ -12,6 +14,11 @@ from napari_core.render import (
     SurfacePointerEvent,
     SurfaceWheelEvent,
 )
+
+da = import_module("dask.array")
+qtest = import_module("PyQt6.QtTest").QTest
+
+PointerKind = Literal["pointer_down", "pointer_up", "pointer_move", "double_click"]
 
 
 class FakeSurface:
@@ -62,7 +69,7 @@ class Closer:
 
 
 def pointer(
-    kind: str,
+    kind: PointerKind,
     x: float,
     y: float,
     button: int = 0,
@@ -100,9 +107,19 @@ def wheel(
     }
 
 
-def view_with_image() -> tuple[View, Image, list[object]]:
-    """Return a view of one image, that image and an empty list to record into."""
+def view_with_image() -> tuple[View, Image]:
+    """Return a view of one image and that image."""
     view = View(canvas_size=(200, 100))
-    layer = Image(name="image", data=np.zeros((3, 4)))
+    layer = image(name="image", data=np.zeros((3, 4)))
     view.layers.append(layer)
-    return view, layer, []
+    return view, layer
+
+
+def image(*, name: str, data: object, **fields: object) -> Image:
+    """Return an image built with `model_validate`, so `transform` may be left out."""
+    return Image.model_validate({"name": name, "data": data, **fields})
+
+
+def assign(obj: object, name: str, value: object) -> None:
+    """Assign `value` to the attribute `name` of `obj` as an untyped caller would."""
+    setattr(obj, name, value)
