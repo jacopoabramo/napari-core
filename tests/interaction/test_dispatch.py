@@ -238,3 +238,44 @@ def test_generator_setting_handled_keeps_the_camera_still(
     surface.emit(pointer("pointer_move", 120, 60, button=1))
     surface.emit(pointer("pointer_up", 120, 60, button=1))
     assert v.camera.center == center
+
+
+def test_move_carries_the_button_that_started_the_drag(surface: FakeSurface) -> None:
+    """Keep the first press as the drag button when a second button goes down."""
+    view, layer = view_with_image()
+    seen: list[tuple[str, int, tuple[int, ...]]] = []
+
+    def record(lyr: Image, event: ButtonEvent) -> Generator[None, None, None]:
+        while True:
+            seen.append((event.type, event.button, event.buttons))
+            yield
+
+    layer.mouse_drag_callbacks.append(record)
+    attach(view, surface)
+    surface.emit(pointer("pointer_down", 10, 10, button=1, buttons=(1,)))
+    surface.emit(pointer("pointer_move", 12, 10, button=0, buttons=(1,)))
+    surface.emit(pointer("pointer_down", 12, 10, button=2, buttons=(1, 2)))
+    surface.emit(pointer("pointer_move", 14, 10, button=0, buttons=(1, 2)))
+    assert seen[1] == ("mouse_move", 1, (1,))
+    assert seen[-1] == ("mouse_move", 1, (1, 2))
+
+
+def test_move_without_a_button_has_button_zero(surface: FakeSurface) -> None:
+    """Report the new press's button on a move only after every button was released."""
+    view, layer = view_with_image()
+    moves: list[int] = []
+
+    def record(lyr: Image, event: ButtonEvent) -> Generator[None, None, None]:
+        while True:
+            if event.type == "mouse_move":
+                moves.append(event.button)
+            yield
+
+    layer.mouse_drag_callbacks.append(record)
+    attach(view, surface)
+    surface.emit(pointer("pointer_down", 10, 10, button=1, buttons=(1,)))
+    surface.emit(pointer("pointer_up", 10, 10, button=1, buttons=()))
+    surface.emit(pointer("pointer_move", 11, 10, button=0, buttons=()))
+    surface.emit(pointer("pointer_down", 10, 10, button=2, buttons=(2,)))
+    surface.emit(pointer("pointer_move", 12, 10, button=0, buttons=(2,)))
+    assert moves == [2]

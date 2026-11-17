@@ -8,10 +8,12 @@ from helpers import (
     Show,
     assign,
     middle,
+    mouse_move,
     mouse_press,
     mouse_release,
     turn_wheel_away,
     undrawable,
+    wait,
     white_image,
 )
 from PyQt6.QtCore import QPoint, Qt
@@ -205,6 +207,21 @@ def test_mouse_press_reaches_handlers_in_rendercanvas_vocabulary(
     (event,) = seen
     assert event["event_type"] == "pointer_down"
     assert (event["x"], event["y"], event["button"]) == (30.0, 40.0, 1)
+    surface.close()
+
+
+def test_pointer_move_has_no_button_and_lists_the_held_ones(shown: Show) -> None:
+    """Emit pointer_move with button 0 and the pressed buttons during a drag."""
+    surface = shown(ViewerModel())
+    seen: list[SurfaceEvent] = []
+    surface.add_event_handler(seen.append, "pointer_move")
+    mouse_press(surface.native, Qt.MouseButton.LeftButton, QPoint(30, 40))
+    wait(20)
+    mouse_move(surface.native, QPoint(40, 40), Qt.MouseButton.LeftButton)
+    wait(50)
+    move = seen[-1]
+    assert move["event_type"] == "pointer_move"
+    assert (move["button"], move["buttons"]) == (0, (1,))
     surface.close()
 
 

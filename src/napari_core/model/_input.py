@@ -62,7 +62,8 @@ class ButtonEvent(PointerEvent):
     """A mouse press, move, release or double click."""
 
     type: Literal["mouse_press", "mouse_move", "mouse_release", "mouse_double_click"]
-    button: int | None
+    button: int
+    buttons: tuple[int, ...]
 
 
 @dataclass(kw_only=True, slots=True)

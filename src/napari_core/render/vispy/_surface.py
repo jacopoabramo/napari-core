@@ -269,7 +269,7 @@ class VispySurface(Generic[NativeT]):
             "event_type": kind,
             "x": float(x),
             "y": float(y),
-            "button": int(event.button or 0),
+            "button": 0 if kind == "pointer_move" else int(event.button or 0),
             "buttons": pressed_buttons(event),
             "modifiers": modifier_names(event),
         }

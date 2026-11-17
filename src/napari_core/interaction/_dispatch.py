@@ -47,6 +47,7 @@ class Dispatcher:
         self._view = view
         self._camera = CameraController(view)
         self._last_pos = (0.0, 0.0)
+        self._drag_button = 0
         self._drags: list[tuple[ButtonEvent, Generator[None, None, None], str]] = []
         self.active = True
 
@@ -90,9 +91,20 @@ class Dispatcher:
     ) -> ButtonEvent:
         x, y = self._last_pos = (event["x"], event["y"])
         dims = self._view.dims
+        button = event["button"]
+        match kind:
+            case "mouse_press" if self._drag_button == 0:
+                self._drag_button = button
+            case "mouse_move":
+                button = self._drag_button
+            case "mouse_release" if not event["buttons"]:
+                self._drag_button = 0
+            case _:
+                pass
         return ButtonEvent(
             type=kind,
-            button=event["button"],
+            button=button,
+            buttons=event["buttons"],
             modifiers=frozenset(Modifier(name) for name in event["modifiers"]),
             view=self._view,
             pos=(x, y),
