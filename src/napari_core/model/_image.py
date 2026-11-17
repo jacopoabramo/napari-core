@@ -123,11 +123,9 @@ class Image(Layer):
 
     @colormap.setter
     def colormap(self, value: Colormap | str) -> None:
-        match value:
-            case Colormap():
-                self.appearance.colormap = value
-            case str():
-                self.appearance.colormap = Colormap(value)
+        self.appearance.colormap = (
+            value if isinstance(value, Colormap) else Colormap(value)
+        )
 
     @property
     def contrast_limits(self) -> tuple[float, float]:

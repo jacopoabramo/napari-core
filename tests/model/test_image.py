@@ -77,6 +77,17 @@ def test_colormap_shortcut_stores_a_colormap_as_it_is() -> None:
     assert layer.colormap.under_color is not None
 
 
+def test_colormap_shortcut_refuses_what_is_not_a_colormap_or_a_name() -> None:
+    """Raise for a value that is neither, keep the colormap and emit nothing."""
+    layer = Image(name="a", data=np.zeros((2, 2)))
+    seen: list[Colormap] = []
+    layer.appearance.events.colormap.connect(seen.append)
+    with pytest.raises(TypeError):
+        assign(layer, "colormap", 5)
+    assert layer.colormap == Colormap("gray")
+    assert seen == []
+
+
 def test_invalid_data_is_refused_on_assignment() -> None:
     """Raise the validation error of as_layer_data when data is assigned."""
     layer = Image(name="a", data=stack())
