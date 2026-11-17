@@ -13,7 +13,7 @@ from helpers import (
     mouse_release,
     turn_wheel_away,
     undrawable,
-    wait,
+    until,
     white_image,
 )
 from PyQt6.QtCore import QPoint, Qt
@@ -216,9 +216,8 @@ def test_pointer_move_has_no_button_and_lists_the_held_ones(shown: Show) -> None
     seen: list[SurfaceEvent] = []
     surface.add_event_handler(seen.append, "pointer_move")
     mouse_press(surface.native, Qt.MouseButton.LeftButton, QPoint(30, 40))
-    wait(20)
     mouse_move(surface.native, QPoint(40, 40), Qt.MouseButton.LeftButton)
-    wait(50)
+    until(lambda: bool(seen), surface, message="a pointer_move event")
     move = seen[-1]
     assert move["event_type"] == "pointer_move"
     assert (move["button"], move["buttons"]) == (0, (1,))

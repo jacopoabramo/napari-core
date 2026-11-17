@@ -1,5 +1,6 @@
 """Plain helpers shared between test modules."""
 
+import time
 from collections.abc import Callable
 from typing import Literal, TypeAlias
 
@@ -254,3 +255,25 @@ def turn_wheel_away(native: QWidget, notches: int) -> None:
         False,
     )
     QApplication.sendEvent(native, event)
+
+
+def until(
+    done: Callable[[], bool],
+    surface: RenderSurface[QWidget] | None = None,
+    timeout: float = 2.0,
+    message: str = "the awaited condition",
+) -> None:
+    """Process Qt events until `done()` is true, requesting draws from `surface`.
+
+    Raises
+    ------
+    AssertionError
+        If `done()` is still false after `timeout` seconds.
+    """
+    deadline = time.monotonic() + timeout
+    while not done():
+        if time.monotonic() > deadline:
+            raise AssertionError(f"timed out after {timeout} s waiting for {message}")
+        if surface is not None:
+            surface.request_draw()
+        wait(5)

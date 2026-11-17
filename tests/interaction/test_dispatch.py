@@ -260,8 +260,10 @@ def test_move_carries_the_button_that_started_the_drag(surface: FakeSurface) -> 
     assert seen[-1] == ("mouse_move", 1, (1, 2))
 
 
-def test_move_without_a_button_has_button_zero(surface: FakeSurface) -> None:
-    """Report the new press's button on a move only after every button was released."""
+def test_move_takes_the_button_of_a_press_after_all_were_released(
+    surface: FakeSurface,
+) -> None:
+    """Report the new press as the drag button once every button was released."""
     view, layer = view_with_image()
     moves: list[int] = []
 
@@ -279,3 +281,45 @@ def test_move_without_a_button_has_button_zero(surface: FakeSurface) -> None:
     surface.emit(pointer("pointer_down", 10, 10, button=2, buttons=(2,)))
     surface.emit(pointer("pointer_move", 12, 10, button=0, buttons=(2,)))
     assert moves == [2]
+
+
+def test_move_keeps_the_first_button_after_it_is_released(surface: FakeSurface) -> None:
+    """Keep the first press as the drag button until every button is up."""
+    view, layer = view_with_image()
+    moves: list[int] = []
+
+    def record(lyr: Image, event: ButtonEvent) -> Generator[None, None, None]:
+        while True:
+            if event.type == "mouse_move":
+                moves.append(event.button)
+            yield
+
+    layer.mouse_drag_callbacks.append(record)
+    attach(view, surface)
+    surface.emit(pointer("pointer_down", 10, 10, button=1, buttons=(1,)))
+    surface.emit(pointer("pointer_down", 10, 10, button=2, buttons=(1, 2)))
+    surface.emit(pointer("pointer_up", 10, 10, button=1, buttons=(2,)))
+    surface.emit(pointer("pointer_down", 10, 10, button=3, buttons=(2, 3)))
+    surface.emit(pointer("pointer_move", 12, 10, button=0, buttons=(2, 3)))
+    assert moves == [1]
+
+
+def test_lone_press_replaces_a_drag_button_left_by_a_lost_release(
+    surface: FakeSurface,
+) -> None:
+    """Report the lone pressed button when no release reached the dispatcher."""
+    view, layer = view_with_image()
+    moves: list[int] = []
+
+    def record(lyr: Image, event: ButtonEvent) -> Generator[None, None, None]:
+        while True:
+            if event.type == "mouse_move":
+                moves.append(event.button)
+            yield
+
+    layer.mouse_drag_callbacks.append(record)
+    attach(view, surface)
+    surface.emit(pointer("pointer_down", 10, 10, button=1, buttons=(1,)))
+    surface.emit(pointer("pointer_down", 10, 10, button=2, buttons=(2,)))
+    surface.emit(pointer("pointer_move", 12, 10, button=0, buttons=(2,)))
+    assert set(moves) == {2}
