@@ -4,7 +4,7 @@ import pytest
 from helpers import FakeSurface, pointer, view, view_with_image, wheel
 
 from napari_core.interaction import attach
-from napari_core.model import ButtonEvent, Image, surface_to_world
+from napari_core.model import ButtonEvent, Image, Modifier, WheelEvent, surface_to_world
 
 
 def test_drag_pans_by_the_pixel_distance_over_zoom(surface: FakeSurface) -> None:
@@ -25,6 +25,20 @@ def test_wheel_zooms_about_the_pointer(surface: FakeSurface) -> None:
     surface.emit(wheel(150, 20, dy=-120))
     assert v.camera.zoom == pytest.approx(2.0 * 1.1**1.2)
     assert surface_to_world(v, 150, 20) == pytest.approx(before)
+
+
+def test_wheel_with_a_modifier_reaches_the_layer_and_does_not_zoom(
+    surface: FakeSurface,
+) -> None:
+    """Call the layer's wheel callback and leave the zoom alone."""
+    v, layer = view_with_image()
+    seen: list[WheelEvent] = []
+    layer.mouse_wheel_callbacks.append(lambda lyr, event: seen.append(event))
+    attach(v, surface)
+    before = v.camera.zoom
+    surface.emit(wheel(100, 50, dy=-120, modifiers=("Control",)))
+    assert [event.modifiers for event in seen] == [frozenset({Modifier.CONTROL})]
+    assert v.camera.zoom == before
 
 
 def test_camera_flags_switch_pan_and_zoom_off(surface: FakeSurface) -> None:

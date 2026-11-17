@@ -15,7 +15,7 @@ class CameraController:
 
     The controller follows every press, move and release, so that its drag
     stays in step with the mouse. A handled event only stops the camera from
-    moving.
+    moving. A wheel event with a modifier key held never zooms.
     """
 
     def __init__(self, view: View) -> None:
@@ -43,6 +43,8 @@ class CameraController:
                 self._drag_from = (x, y)
             case ButtonEvent(type="mouse_release", button=1):
                 self._drag_from = None
+            case WheelEvent(modifiers=modifiers) if modifiers:
+                pass
             case WheelEvent(pos=(x, y), delta=(_, dy)) if (
                 camera.mouse_zoom and not event.handled
             ):
