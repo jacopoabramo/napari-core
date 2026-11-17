@@ -8,6 +8,7 @@ import numpy.typing as npt
 
 from napari_core.model import View
 
+from ._capabilities import Capabilities
 from ._events import SurfaceEvent, SurfaceEventType
 
 NativeT = TypeVar("NativeT")
@@ -85,6 +86,7 @@ class RenderBackend(Protocol[NativeT]):
     """A rendering library that can make surfaces."""
 
     name: str
+    capabilities: Capabilities
 
     def create_surface(
         self, view: View, parent: NativeT | None

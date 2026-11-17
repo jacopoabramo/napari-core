@@ -2,7 +2,7 @@
 
 from ._camera import Camera
 from ._colormap import COLORMAPS, Colormap
-from ._components import IntensityAppearance, Transform
+from ._components import IntensityAppearance, Interpolation, Transform
 from ._config import EventedConfigDict
 from ._dims import Dims
 from ._image import Image
@@ -36,6 +36,7 @@ __all__ = [
     "Image",
     "InputEvent",
     "IntensityAppearance",
+    "Interpolation",
     "Layer",
     "LayerT",
     "Modifier",

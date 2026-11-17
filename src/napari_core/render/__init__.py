@@ -1,5 +1,6 @@
 """What a rendering backend and its surface must provide."""
 
+from ._capabilities import Capabilities, supported
 from ._events import (
     SurfaceEnterLeaveEvent,
     SurfaceEvent,
@@ -12,6 +13,7 @@ from ._protocols import LayerAdapter, NativeT, NativeT_co, RenderBackend, Render
 from ._registry import create_layer_adapter, register_layer_adapter
 
 __all__ = [
+    "Capabilities",
     "LayerAdapter",
     "NativeT",
     "NativeT_co",
@@ -25,4 +27,5 @@ __all__ = [
     "SurfaceWheelEvent",
     "create_layer_adapter",
     "register_layer_adapter",
+    "supported",
 ]

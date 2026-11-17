@@ -8,10 +8,19 @@ from vispy.color import Colormap as VispyColormap
 from vispy.scene.visuals import Image as ImageVisual
 from vispy.visuals.transforms import STTransform
 
-from napari_core.model import Image, IntensityAppearance, Layer, Transform, View
+from napari_core.model import (
+    Image,
+    IntensityAppearance,
+    Interpolation,
+    Layer,
+    Transform,
+    View,
+)
+from napari_core.render import Capabilities, supported
 from napari_core.typing import SliceArray
 
 BACKEND_NAME = "vispy"
+CAPABILITIES = Capabilities(interpolation=frozenset(Interpolation))
 
 
 class Visual(Protocol):
@@ -22,6 +31,7 @@ class Visual(Protocol):
     cmap: VispyColormap
     clim: tuple[float, float]
     gamma: float
+    interpolation: str
     transform: STTransform
     parent: object | None
 
@@ -35,12 +45,19 @@ class AppearanceReactions:
     the object is what disconnects them.
     """
 
-    def __init__(self, appearance: IntensityAppearance, visual: Visual) -> None:
+    def __init__(
+        self,
+        appearance: IntensityAppearance,
+        visual: Visual,
+        warned: set[Interpolation],
+    ) -> None:
         self.appearance = appearance
         self.visual = visual
+        self.warned = warned
         appearance.events.colormap.connect(self.show_colormap)
         appearance.events.contrast_limits.connect(self.show_contrast_limits)
         appearance.events.gamma.connect(self.show_gamma)
+        appearance.events.interpolation.connect(self.show_interpolation)
 
     def show_colormap(self) -> None:
         self.visual.cmap = VispyColormap(self.appearance.colormap.colors)
@@ -51,10 +68,21 @@ class AppearanceReactions:
     def show_gamma(self) -> None:
         self.visual.gamma = self.appearance.gamma
 
+    def show_interpolation(self) -> None:
+        self.visual.interpolation = supported(
+            self.appearance.interpolation,
+            CAPABILITIES.interpolation,
+            Interpolation.NEAREST,
+            self.warned,
+            "interpolation",
+            BACKEND_NAME,
+        ).value
+
     def show_all(self) -> None:
         self.show_colormap()
         self.show_contrast_limits()
         self.show_gamma()
+        self.show_interpolation()
 
 
 class TransformReactions:
@@ -95,11 +123,14 @@ class Reactions:
     so dropping the object is what disconnects them.
     """
 
-    def __init__(self, layer: Image, view: View, visual: Visual) -> None:
+    def __init__(
+        self, layer: Image, view: View, visual: Visual, warned: set[Interpolation]
+    ) -> None:
         self.layer = layer
         self.view = view
         self.visual = visual
-        self.appearance = AppearanceReactions(layer.appearance, visual)
+        self.warned = warned
+        self.appearance = AppearanceReactions(layer.appearance, visual, warned)
         self.transform = TransformReactions(layer.transform, visual)
         view.slicer.sliced.connect(self.on_sliced)
         layer.events.visible.connect(self.show_visible)
@@ -122,7 +153,9 @@ class Reactions:
         self.visual.opacity = self.layer.opacity
 
     def follow_appearance(self) -> None:
-        self.appearance = AppearanceReactions(self.layer.appearance, self.visual)
+        self.appearance = AppearanceReactions(
+            self.layer.appearance, self.visual, self.warned
+        )
         self.appearance.show_all()
 
     def follow_transform(self) -> None:
@@ -147,7 +180,7 @@ class VispyImageAdapter:
     def __init__(self, layer: Image, view: View) -> None:
         # The checkers see only the visual part of the node, not its scene part.
         self.visual = cast(Visual, ImageVisual(interpolation="nearest"))
-        self._reactions: Reactions | None = Reactions(layer, view, self.visual)
+        self._reactions: Reactions | None = Reactions(layer, view, self.visual, set())
         self._reactions.show_all()
 
     def close(self) -> None:

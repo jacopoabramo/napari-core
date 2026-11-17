@@ -3,9 +3,9 @@
 from typing import Generic
 
 from napari_core.model import View
-from napari_core.render import NativeT, RenderSurface
+from napari_core.render import Capabilities, NativeT, RenderSurface
 
-from ._image import BACKEND_NAME
+from ._image import BACKEND_NAME, CAPABILITIES
 from ._surface import VispySurface
 
 
@@ -13,6 +13,7 @@ class VispyBackend(Generic[NativeT]):
     """Makes surfaces that draw a view on a vispy canvas."""
 
     name: str = BACKEND_NAME
+    capabilities: Capabilities = CAPABILITIES
 
     def create_surface(
         self, view: View, parent: NativeT | None

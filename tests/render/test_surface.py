@@ -1,6 +1,7 @@
 import gc
 import logging
 import weakref
+from typing import Final
 
 import numpy as np
 import pytest
@@ -25,6 +26,7 @@ from napari_core.model import (
     Camera,
     Image,
     IntensityAppearance,
+    Interpolation,
     Transform,
     ViewerModel,
 )
@@ -36,6 +38,7 @@ BACKGROUND = (0, 0, 0)
 WHITE = (255, 255, 255)
 RED = (255, 0, 0)
 BLUE = (0, 0, 255)
+LACKS_LANCZOS: Final = frozenset({"pygfx"})
 
 
 def test_image_is_drawn(shown: Show) -> None:
@@ -490,3 +493,27 @@ def test_pointer_enter_and_leave_are_emitted(shown: Show) -> None:
     until(lambda: len(seen) == 2, surface, message="enter and leave")
     assert [event["event_type"] for event in seen] == ["pointer_enter", "pointer_leave"]
     surface.close()
+
+
+def test_lanczos_is_kept_by_the_model_and_warned_about_where_it_cannot_be_drawn(
+    shown: Show, backend: RenderBackend[QWidget], caplog: pytest.LogCaptureFixture
+) -> None:
+    """Keep lanczos in the model and warn once on a backend that lacks it."""
+    viewer = ViewerModel()
+    layer = white_image()
+    layer.interpolation = "lanczos"
+    viewer.layers.append(layer)
+    viewer.camera.center = (25.0, 25.0)
+    with caplog.at_level(logging.WARNING, logger="napari_core"):
+        surface = shown(viewer)
+        layer.interpolation = "linear"
+        layer.interpolation = "lanczos"
+        layer.appearance = IntensityAppearance(
+            contrast_limits=(0.0, 255.0), interpolation=Interpolation.LANCZOS
+        )
+    assert layer.interpolation == Interpolation.LANCZOS
+    assert middle(surface.screenshot()) == WHITE
+    assert len(caplog.records) == (1 if backend.name in LACKS_LANCZOS else 0)
+    assert (Interpolation.LANCZOS in backend.capabilities.interpolation) == (
+        backend.name not in LACKS_LANCZOS
+    )

@@ -10,7 +10,7 @@ from napari_core.data import adapter_for, as_layer_data
 from napari_core.typing import BasicKey, LayerDataProtocol, SliceArray
 
 from ._colormap import Colormap, colormap_named
-from ._components import IntensityAppearance, Transform
+from ._components import IntensityAppearance, Interpolation, Transform
 from ._config import EventedConfigDict
 from ._dims import Dims
 from ._layer import Layer
@@ -144,6 +144,15 @@ class Image(Layer):
     @gamma.setter
     def gamma(self, value: float) -> None:
         self.appearance.gamma = value
+
+    @property
+    def interpolation(self) -> Interpolation:
+        """The interpolation of the appearance."""
+        return self.appearance.interpolation
+
+    @interpolation.setter
+    def interpolation(self, value: Interpolation | str) -> None:
+        self.appearance.interpolation = Interpolation(value)
 
     @property
     def scale(self) -> tuple[float, ...]:

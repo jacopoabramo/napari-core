@@ -1,6 +1,7 @@
 """Models that describe how a layer is placed and drawn."""
 
 from collections.abc import Sized
+from enum import StrEnum
 
 from psygnal import EventedModel
 from pydantic import Field, ValidationInfo, field_validator
@@ -48,6 +49,15 @@ class Transform(EventedModel):
         return value
 
 
+class Interpolation(StrEnum):
+    """How an image is resampled when it is drawn at another size."""
+
+    NEAREST = "nearest"
+    LINEAR = "linear"
+    CUBIC = "cubic"
+    LANCZOS = "lanczos"
+
+
 class IntensityAppearance(EventedModel):
     """How an intensity image is mapped to colour.
 
@@ -60,12 +70,14 @@ class IntensityAppearance(EventedModel):
             "colormap": ["colormap"],
             "contrast_limits": ["contrast_limits"],
             "gamma": ["gamma"],
+            "interpolation": ["interpolation"],
         },
     )
 
     colormap: Colormap = Field(default_factory=lambda: COLORMAPS["gray"])
     contrast_limits: tuple[float, float] = (0.0, 1.0)
     gamma: float = Field(default=1.0, gt=0)
+    interpolation: Interpolation = Interpolation.NEAREST
 
     @field_validator("colormap", mode="before")
     @classmethod

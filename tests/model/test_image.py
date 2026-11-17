@@ -11,6 +11,7 @@ from napari_core.model import (
     Dims,
     Image,
     IntensityAppearance,
+    Interpolation,
     Layer,
     Transform,
 )
@@ -413,3 +414,25 @@ def test_identity_name_that_is_not_a_field_is_refused() -> None:
     """Refuse a class whose `compared_by_identity` names a field it does not have."""
     with pytest.raises(TypeError, match="Misspelled.*'dta'"):
         type("Misspelled", (Image,), {"compared_by_identity": ("dta",)})
+
+
+def test_interpolation_defaults_to_nearest_and_emits_the_stored_value() -> None:
+    """Start at nearest and emit the enum member when a name is assigned."""
+    layer = Image(name="a", data=stack())
+    seen: list[Interpolation] = []
+    layer.appearance.events.interpolation.connect(seen.append)
+    assert layer.interpolation is Interpolation.NEAREST
+    layer.interpolation = "linear"
+    assert layer.interpolation is Interpolation.LINEAR
+    assert seen == [Interpolation.LINEAR]
+
+
+def test_unknown_interpolation_is_refused() -> None:
+    """Refuse an unknown name, keep the old value and emit nothing."""
+    layer = Image(name="a", data=stack())
+    seen: list[Interpolation] = []
+    layer.appearance.events.interpolation.connect(seen.append)
+    with pytest.raises(ValueError, match="bogus"):
+        layer.interpolation = "bogus"
+    assert layer.interpolation is Interpolation.NEAREST
+    assert seen == []
