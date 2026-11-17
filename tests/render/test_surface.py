@@ -16,7 +16,7 @@ from helpers import (
     until,
     white_image,
 )
-from PyQt6.QtCore import QPoint, Qt
+from PyQt6.QtCore import QEvent, QPoint, Qt
 from PyQt6.QtWidgets import QApplication, QWidget
 
 from napari_core.interaction import attach
@@ -466,3 +466,15 @@ def test_closed_surface_can_be_attached_again(shown: Show) -> None:
     attach(viewer.view, surface)
     surface.close()
     attach(viewer.view, surface)
+
+
+def test_pointer_enter_and_leave_are_emitted(shown: Show) -> None:
+    """Emit pointer_enter and pointer_leave when Qt reports them to the widget."""
+    surface = shown(ViewerModel())
+    seen: list[SurfaceEvent] = []
+    surface.add_event_handler(seen.append, "pointer_enter", "pointer_leave")
+    QApplication.sendEvent(surface.native, QEvent(QEvent.Type.Enter))
+    QApplication.sendEvent(surface.native, QEvent(QEvent.Type.Leave))
+    until(lambda: len(seen) == 2, surface, message="enter and leave")
+    assert [event["event_type"] for event in seen] == ["pointer_enter", "pointer_leave"]
+    surface.close()

@@ -29,6 +29,10 @@ logger = logging.getLogger(__name__)
 
 WHEEL_NOTCH = 120
 OWNER_ATTRIBUTE = "napari_core_surface"
+ENTER_LEAVE_METHODS: dict[str, Literal["pointer_enter", "pointer_leave"]] = {
+    "enterEvent": "pointer_enter",
+    "leaveEvent": "pointer_leave",
+}
 
 
 class Attachable(Protocol):
@@ -176,6 +180,7 @@ class VispySurface(Generic[NativeT]):
             raise
         # vispy and psygnal hold the handlers weakly, so the widget keeps the surface.
         setattr(self._canvas.native, OWNER_ATTRIBUTE, self)
+        self._forward_enter_leave()
 
     @property
     def native(self) -> NativeT:
@@ -239,7 +244,29 @@ class VispySurface(Generic[NativeT]):
         self._handlers = []
         if getattr(self._canvas.native, OWNER_ATTRIBUTE, None) is self:
             delattr(self._canvas.native, OWNER_ATTRIBUTE)
+            for name in ENTER_LEAVE_METHODS:
+                vars(self._canvas.native).pop(name, None)
         self._close_canvas()
+
+    def _forward_enter_leave(self) -> None:
+        """Emit enter and leave from the widget's `enterEvent` and `leaveEvent`.
+
+        Vispy has no such events, and a Qt import is not allowed here, so the
+        methods are set on the widget instance; each still calls the widget's own.
+        """
+        native = self._canvas.native
+        for name, kind in ENTER_LEAVE_METHODS.items():
+            original = getattr(native, name)
+
+            def forward(
+                event: object,
+                original: Callable[[object], None] = original,
+                kind: Literal["pointer_enter", "pointer_leave"] = kind,
+            ) -> None:
+                original(event)
+                self._emit({"event_type": kind})
+
+            setattr(native, name, forward)
 
     def _close_canvas(self) -> None:
         native = self._canvas.native
