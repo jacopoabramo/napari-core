@@ -2,7 +2,7 @@ from collections.abc import Generator
 
 import numpy as np
 import pytest
-from helpers import FakeSurface, image, pointer, view_with_image, wheel
+from helpers import FakeSurface, pointer, view_with_image, wheel
 
 from napari_core.interaction import attach, surface_to_world
 from napari_core.model import ButtonEvent, Image, Modifier, WheelEvent
@@ -64,7 +64,7 @@ def test_only_the_top_visible_layer_gets_callbacks(surface: FakeSurface) -> None
     """Send events to the last visible layer in the list."""
     v, bottom = view_with_image()
     seen: list[str] = []
-    top = image(name="top", data=np.zeros((3, 4)), visible=False)
+    top = Image(name="top", data=np.zeros((3, 4)), visible=False)
     v.layers.append(top)
     top.mouse_drag_callbacks.append(lambda lyr, event: seen.append("top"))
     bottom.mouse_drag_callbacks.append(lambda lyr, event: seen.append("bottom"))

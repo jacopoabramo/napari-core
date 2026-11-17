@@ -1,11 +1,13 @@
 """Plain helpers shared between test modules."""
 
 from collections.abc import Callable
-from importlib import import_module
 from typing import Literal
 
 import numpy as np
 import numpy.typing as npt
+from PyQt6.QtCore import QEvent, QPoint, QPointF, Qt, QThread
+from PyQt6.QtGui import QMouseEvent
+from PyQt6.QtWidgets import QApplication, QWidget
 
 from napari_core.model import Image, View
 from napari_core.render import (
@@ -14,9 +16,6 @@ from napari_core.render import (
     SurfacePointerEvent,
     SurfaceWheelEvent,
 )
-
-da = import_module("dask.array")
-qtest = import_module("PyQt6.QtTest").QTest
 
 PointerKind = Literal["pointer_down", "pointer_up", "pointer_move", "double_click"]
 
@@ -110,16 +109,59 @@ def wheel(
 def view_with_image() -> tuple[View, Image]:
     """Return a view of one image and that image."""
     view = View(canvas_size=(200, 100))
-    layer = image(name="image", data=np.zeros((3, 4)))
+    layer = Image(name="image", data=np.zeros((3, 4)))
     view.layers.append(layer)
     return view, layer
-
-
-def image(*, name: str, data: object, **fields: object) -> Image:
-    """Return an image built with `model_validate`, so `transform` may be left out."""
-    return Image.model_validate({"name": name, "data": data, **fields})
 
 
 def assign(obj: object, name: str, value: object) -> None:
     """Assign `value` to the attribute `name` of `obj` as an untyped caller would."""
     setattr(obj, name, value)
+
+
+def send_mouse_event(
+    widget: QWidget,
+    kind: QEvent.Type,
+    pos: QPoint,
+    button: Qt.MouseButton,
+    buttons: Qt.MouseButton,
+) -> None:
+    """Send `widget` a mouse event of type `kind` at `pos`, in widget coordinates."""
+    event = QMouseEvent(
+        kind,
+        QPointF(pos),
+        QPointF(widget.mapToGlobal(pos)),
+        button,
+        buttons,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    QApplication.sendEvent(widget, event)
+
+
+def mouse_press(widget: QWidget, button: Qt.MouseButton, pos: QPoint) -> None:
+    """Press `button` on `widget` at `pos`."""
+    send_mouse_event(widget, QEvent.Type.MouseButtonPress, pos, button, button)
+
+
+def mouse_move(
+    widget: QWidget,
+    pos: QPoint,
+    buttons: Qt.MouseButton = Qt.MouseButton.NoButton,
+) -> None:
+    """Move the pointer over `widget` to `pos`, with `buttons` held."""
+    send_mouse_event(
+        widget, QEvent.Type.MouseMove, pos, Qt.MouseButton.NoButton, buttons
+    )
+
+
+def mouse_release(widget: QWidget, button: Qt.MouseButton, pos: QPoint) -> None:
+    """Release `button` on `widget` at `pos`."""
+    send_mouse_event(
+        widget, QEvent.Type.MouseButtonRelease, pos, button, Qt.MouseButton.NoButton
+    )
+
+
+def wait(milliseconds: int) -> None:
+    """Sleep for `milliseconds`, then handle the pending Qt events."""
+    QThread.msleep(milliseconds)
+    QApplication.processEvents()

@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-from helpers import da
 
 from napari_core.data import as_layer_data
 
@@ -17,11 +16,10 @@ def test_names_the_missing_members() -> None:
         as_layer_data([1, 2, 3])
 
 
-def test_rejects_dask_array_with_unknown_sizes() -> None:
+def test_rejects_dask_array_with_unknown_sizes(dask_unknown_sizes: object) -> None:
     """Reject a dask array whose shape is not known and name the fix."""
-    array = da.arange(10)
     with pytest.raises(TypeError, match=r"compute_chunk_sizes\(\)"):
-        as_layer_data(array[array > 3])
+        as_layer_data(dask_unknown_sizes)
 
 
 class BoolShaped:
@@ -40,7 +38,6 @@ def test_rejects_a_bool_in_the_shape() -> None:
         as_layer_data(BoolShaped())
 
 
-def test_accepts_dask_array_with_known_sizes() -> None:
+def test_accepts_dask_array_with_known_sizes(dask_known_sizes: object) -> None:
     """Accept a dask array whose shape is known."""
-    array = da.zeros((4, 5, 6), chunks=(1, 5, 6))
-    assert as_layer_data(array) is array
+    assert as_layer_data(dask_known_sizes) is dask_known_sizes

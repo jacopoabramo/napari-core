@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-from helpers import da
 
 from napari_core.data import (
     adapter_for,
@@ -38,12 +37,11 @@ def test_numpy_adapter_is_in_memory_and_materializes() -> None:
     np.testing.assert_array_equal(adapter.materialize(array, (1, ...)), array[1])
 
 
-def test_dask_adapter_is_lazy_and_returns_numpy() -> None:
+def test_dask_adapter_is_lazy_and_returns_numpy(dask_stack: LayerDataProtocol) -> None:
     """Compute a dask slice into a NumPy array."""
-    array = da.arange(24).reshape(2, 3, 4)
-    adapter = adapter_for(as_layer_data(array))
+    adapter = adapter_for(dask_stack)
     assert not adapter.in_memory
-    result = adapter.materialize(as_layer_data(array), (1, ...))
+    result = adapter.materialize(dask_stack, (1, ...))
     assert isinstance(result, np.ndarray)
     np.testing.assert_array_equal(result, np.arange(12, 24).reshape(3, 4))
 

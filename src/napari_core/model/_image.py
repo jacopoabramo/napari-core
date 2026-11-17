@@ -60,6 +60,11 @@ class Image(Layer):
     model_config = EventedConfigDict(arbitrary_types_allowed=True)
     compared_by_identity: ClassVar[tuple[str, ...]] = ("data",)
 
+    # Never used: `_default_transform` supplies the real default from the data. The
+    # default only tells the checkers that `transform` may be left out.
+    transform: Transform = Field(
+        default_factory=lambda: Transform(scale=(), translate=())
+    )
     data: LayerDataProtocol
     appearance: IntensityAppearance = Field(default_factory=IntensityAppearance)
 

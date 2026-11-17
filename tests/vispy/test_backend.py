@@ -6,7 +6,7 @@ from collections.abc import Callable
 import numpy as np
 import numpy.typing as npt
 import pytest
-from helpers import assign, image, qtest
+from helpers import assign, mouse_move, mouse_press, mouse_release, wait
 from PyQt6 import sip
 from PyQt6.QtCore import QCoreApplication, QEvent, QPoint, QPointF, Qt
 from PyQt6.QtGui import QImage, QWheelEvent
@@ -64,7 +64,7 @@ def undrawable() -> Undrawable:
 
 def white_image() -> Image:
     """Return a 50 by 50 image whose pixels all map to white."""
-    return image(
+    return Image(
         name="a",
         data=np.full((50, 50), 255, dtype=np.uint8),
         appearance=IntensityAppearance(contrast_limits=(0.0, 255.0)),
@@ -197,7 +197,7 @@ def test_image_orientation_and_pixel_centres(qapp: QApplication) -> None:
     data[0, 0] = 255
     viewer = ViewerModel()
     viewer.layers.append(
-        image(
+        Image(
             name="a",
             data=data,
             appearance=IntensityAppearance(contrast_limits=(0.0, 255.0)),
@@ -285,7 +285,7 @@ def test_mouse_press_reaches_handlers_in_rendercanvas_vocabulary(
     seen: list[SurfaceEvent] = []
     surface.add_event_handler(seen.append, "pointer_down")
     # Presses are not coalesced, so the handler has run when mousePress returns.
-    qtest.mousePress(surface.native, Qt.MouseButton.LeftButton, pos=QPoint(30, 40))
+    mouse_press(surface.native, Qt.MouseButton.LeftButton, QPoint(30, 40))
     (event,) = seen
     assert event["event_type"] == "pointer_down"
     assert (event["x"], event["y"], event["button"]) == (30.0, 40.0, 1)
@@ -465,13 +465,13 @@ def test_surface_works_while_only_its_widget_is_kept(qapp: QApplication) -> None
     qapp.processEvents()
     assert middle(grab(native)) == BACKGROUND
     viewer.camera.center = (25.0, 25.0)
-    qtest.mousePress(native, Qt.MouseButton.LeftButton, pos=QPoint(30, 40))
+    mouse_press(native, Qt.MouseButton.LeftButton, QPoint(30, 40))
     assert [event["event_type"] for event in seen] == ["pointer_down"]
-    qtest.mouseMove(native, QPoint(30, 40))
+    mouse_move(native, QPoint(30, 40), Qt.MouseButton.LeftButton)
     for offset in range(1, 6):
-        qtest.mouseMove(native, QPoint(30 + 4 * offset, 40))
-        qtest.qWait(20)
-    qtest.mouseRelease(native, Qt.MouseButton.LeftButton, pos=QPoint(50, 40))
+        mouse_move(native, QPoint(30 + 4 * offset, 40), Qt.MouseButton.LeftButton)
+        wait(20)
+    mouse_release(native, Qt.MouseButton.LeftButton, QPoint(50, 40))
     assert viewer.camera.center[1] < 25.0
     native.close()
     native.deleteLater()

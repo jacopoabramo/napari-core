@@ -1,13 +1,17 @@
 """Shared test fixtures."""
 
-# pyright: reportMissingTypeStubs=false, reportUnknownVariableType=false
+# pyright: reportMissingTypeStubs=false, reportUnknownVariableType=false, reportUnknownMemberType=false, reportUnknownArgumentType=false
 
 from importlib import import_module
 
+import dask.array as da
 import pytest
 from helpers import FakeSurface
 from PyQt6.QtWidgets import QApplication
 from vispy.app import use_app
+
+from napari_core.data import as_layer_data
+from napari_core.typing import LayerDataProtocol
 
 
 @pytest.fixture
@@ -42,3 +46,28 @@ def qapp() -> QApplication:
         pytest.skip(f"no PyQt6 backend for vispy: {error}")
     assert isinstance(app, QApplication)
     return app
+
+
+@pytest.fixture
+def dask_stack() -> LayerDataProtocol:
+    """Return a 3D dask array, as layer data."""
+    return as_layer_data(da.arange(24).reshape(2, 3, 4))
+
+
+@pytest.fixture
+def dask_four_axes() -> LayerDataProtocol:
+    """Return a 4D dask array, as layer data."""
+    return as_layer_data(da.arange(120).reshape(2, 3, 4, 5))
+
+
+@pytest.fixture
+def dask_unknown_sizes() -> object:
+    """Return a dask array whose shape holds NaN."""
+    array = da.arange(10)
+    return array[array > 3]
+
+
+@pytest.fixture
+def dask_known_sizes() -> object:
+    """Return a dask array whose shape is known."""
+    return da.zeros((4, 5, 6), chunks=(1, 5, 6))

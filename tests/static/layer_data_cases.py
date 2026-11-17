@@ -90,3 +90,8 @@ def wheel_delta(event: SurfaceEvent) -> float:
             return event["dy"]  # type: ignore
         case _:
             return 0.0
+
+
+def image_without_transform_or_appearance(data: LayerDataProtocol) -> Image:
+    """Build an image that leaves out its transform and appearance."""
+    return Image(name="a", data=data)
