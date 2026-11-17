@@ -54,6 +54,27 @@ def test_unknown_colormap_name_is_refused() -> None:
         IntensityAppearance.model_validate({"colormap": "no_such_colormap"})
 
 
+def test_colormap_name_assigned_to_the_field_emits_a_colormap() -> None:
+    """Emit the colormap that a name stands for, not the name."""
+    appearance = IntensityAppearance()
+    seen: list[Colormap] = []
+    appearance.events.colormap.connect(seen.append)
+    assign(appearance, "colormap", "red")
+    assert seen == [Colormap("red")]
+    assert isinstance(seen[0], Colormap)
+
+
+def test_unknown_colormap_name_assigned_to_the_field_is_refused() -> None:
+    """Refuse an unknown name on assignment, keep the colormap and emit nothing."""
+    appearance = IntensityAppearance()
+    seen: list[Colormap] = []
+    appearance.events.colormap.connect(seen.append)
+    with pytest.raises(ValueError, match="not found"):
+        assign(appearance, "colormap", "no_such_colormap")
+    assert appearance.colormap == Colormap("gray")
+    assert seen == []
+
+
 def test_colormap_assignment_with_an_equal_colormap_does_not_emit() -> None:
     """Compare colormaps by value, so a second object of the same colormap is silent."""
     appearance = IntensityAppearance()

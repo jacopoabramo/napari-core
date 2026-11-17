@@ -68,6 +68,15 @@ def test_unknown_colormap_name_is_refused() -> None:
     assert layer.colormap == before
 
 
+def test_colormap_shortcut_stores_a_colormap_as_it_is() -> None:
+    """Store the colormap object that is assigned, with its under colour."""
+    layer = Image(name="a", data=np.zeros((2, 2)))
+    colormap = Colormap("red", under="blue")
+    layer.colormap = colormap
+    assert layer.colormap is colormap
+    assert layer.colormap.under_color is not None
+
+
 def test_invalid_data_is_refused_on_assignment() -> None:
     """Raise the validation error of as_layer_data when data is assigned."""
     layer = Image(name="a", data=stack())
