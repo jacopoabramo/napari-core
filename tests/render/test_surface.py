@@ -378,6 +378,18 @@ def test_closed_surface_is_freed_and_ignores_the_model(
     viewer.layers.clear()
 
 
+def test_closed_surface_is_freed_while_its_widget_is_held(shown: Show) -> None:
+    """Free a closed surface even when the caller still holds its widget."""
+    surface = shown(ViewerModel())
+    native = surface.native
+    reference = weakref.ref(surface)
+    surface.close()
+    del surface
+    gc.collect()
+    assert reference() is None
+    assert native is not None
+
+
 def test_undrawable_layer_in_the_view_makes_create_surface_raise(
     backend: RenderBackend[QWidget],
 ) -> None:

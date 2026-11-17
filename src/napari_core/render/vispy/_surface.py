@@ -180,6 +180,8 @@ class VispySurface(Generic[NativeT]):
             raise
         # vispy and psygnal hold the handlers weakly, so the widget keeps the surface.
         setattr(self._canvas.native, OWNER_ATTRIBUTE, self)
+        # sip caches a missing override per instance once an event arrives, so this
+        # must run before the widget can receive one.
         self._forward_enter_leave()
 
     @property
