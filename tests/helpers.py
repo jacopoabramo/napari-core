@@ -1,16 +1,25 @@
 """Plain helpers shared between test modules."""
 
 from collections.abc import Callable
-from typing import Literal
+from typing import Literal, TypeAlias
 
 import numpy as np
 import numpy.typing as npt
 from PyQt6.QtCore import QEvent, QPoint, QPointF, Qt, QThread
-from PyQt6.QtGui import QMouseEvent
+from PyQt6.QtGui import QMouseEvent, QWheelEvent
 from PyQt6.QtWidgets import QApplication, QWidget
 
-from napari_core.model import Image, View
+from napari_core.model import (
+    Image,
+    IntensityAppearance,
+    Layer,
+    Transform,
+    View,
+    ViewerModel,
+)
 from napari_core.render import (
+    RenderBackend,
+    RenderSurface,
     SurfaceEvent,
     SurfaceEventType,
     SurfacePointerEvent,
@@ -18,6 +27,8 @@ from napari_core.render import (
 )
 
 PointerKind = Literal["pointer_down", "pointer_up", "pointer_move", "double_click"]
+BackendFactory: TypeAlias = Callable[[], RenderBackend[QWidget]]
+Show: TypeAlias = Callable[[ViewerModel], RenderSurface[QWidget]]
 
 
 class FakeSurface:
@@ -165,3 +176,57 @@ def wait(milliseconds: int) -> None:
     """Sleep for `milliseconds`, then handle the pending Qt events."""
     QThread.msleep(milliseconds)
     QApplication.processEvents()
+
+
+class Undrawable(Layer):
+    """A layer type that no backend has an adapter for."""
+
+    data: int = 0
+
+    @property
+    def ndim(self) -> int:
+        return 2
+
+    @property
+    def extent_steps(self) -> tuple[int, ...]:
+        return (2, 2)
+
+    def slice(self, dims: object) -> npt.NDArray[np.uint8]:
+        return np.zeros((2, 2), dtype=np.uint8)
+
+
+def undrawable() -> Undrawable:
+    """Return a layer of a type no backend can draw."""
+    return Undrawable(
+        name="p", transform=Transform(scale=(1.0, 1.0), translate=(0.0, 0.0))
+    )
+
+
+def white_image() -> Image:
+    """Return a 50 by 50 image whose pixels all map to white."""
+    return Image(
+        name="a",
+        data=np.full((50, 50), 255, dtype=np.uint8),
+        appearance=IntensityAppearance(contrast_limits=(0.0, 255.0)),
+    )
+
+
+def middle(shot: npt.NDArray[np.uint8]) -> tuple[int, ...]:
+    """Return the RGB value of the middle pixel of `shot`."""
+    return tuple(shot[shot.shape[0] // 2, shot.shape[1] // 2, :3])
+
+
+def turn_wheel_away(native: QWidget, notches: int) -> None:
+    """Send `native` a wheel event of `notches` turned away from the user."""
+    centre = QPointF(100.0, 50.0)
+    event = QWheelEvent(
+        centre,
+        QPointF(native.mapToGlobal(centre)),
+        QPoint(0, 0),
+        QPoint(0, 120 * notches),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    QApplication.sendEvent(native, event)
