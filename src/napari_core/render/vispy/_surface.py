@@ -12,7 +12,7 @@ from vispy.app.canvas import MouseEvent
 from vispy.geometry import Rect
 from vispy.scene import PanZoomCamera, SceneCanvas
 
-from napari_core.model import Layer, View
+from napari_core.model import Layer, View, visible_rect
 from napari_core.render import (
     LayerAdapter,
     SurfaceEvent,
@@ -76,15 +76,8 @@ class ViewSync:
         width, height = self._view.canvas_size
         if width == 0 or height == 0:
             return
-        zoom = self._view.camera.zoom
-        row, column = self._view.camera.center
-        visible_width, visible_height = width / zoom, height / zoom
-        self._camera.rect = Rect(
-            column - visible_width / 2,
-            row - visible_height / 2,
-            visible_width,
-            visible_height,
-        )
+        rect = visible_rect(self._view)
+        self._camera.rect = Rect(rect.left, rect.top, rect.width, rect.height)
 
     def sync_layers(self) -> None:
         """Close the adapters of removed layers and make those of new ones.

@@ -2,7 +2,13 @@
 
 import math
 
-from napari_core.model import ButtonEvent, View, WheelEvent
+from napari_core.model import (
+    ButtonEvent,
+    Camera,
+    View,
+    WheelEvent,
+    surface_to_world,
+)
 
 
 class CameraController:
@@ -52,16 +58,20 @@ class CameraController:
         not above 0, is skipped.
         """
         camera = self._view.camera
-        width, height = self._view.canvas_size
         try:
             zoom = camera.zoom * 1.1 ** (-dy / 100)
         except OverflowError:
             return
         if not (math.isfinite(zoom) and zoom > 0):
             return
-        scale = 1 / camera.zoom - 1 / zoom
+        before = surface_to_world(self._view, x, y)
+        zoomed = View(
+            canvas_size=self._view.canvas_size,
+            camera=Camera(center=camera.center, zoom=zoom),
+        )
+        after = surface_to_world(zoomed, x, y)
         row, column = camera.center
-        center = (row + (y - height / 2) * scale, column + (x - width / 2) * scale)
+        center = (row + before[0] - after[0], column + before[1] - after[1])
         if not all(map(math.isfinite, center)):
             return
         camera.zoom = zoom

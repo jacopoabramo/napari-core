@@ -19,6 +19,7 @@ from ._input import (
     WheelEvent,
 )
 from ._layer import Layer
+from ._mapping import WorldRect, surface_to_world, visible_rect
 from ._slicer import Slicer
 from ._view import View
 from ._viewer import ViewerModel
@@ -46,4 +47,7 @@ __all__ = [
     "ViewerModel",
     "WheelCallback",
     "WheelEvent",
+    "WorldRect",
+    "surface_to_world",
+    "visible_rect",
 ]

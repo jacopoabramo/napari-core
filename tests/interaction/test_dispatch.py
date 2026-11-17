@@ -4,8 +4,14 @@ import numpy as np
 import pytest
 from helpers import FakeSurface, pointer, view_with_image, wheel
 
-from napari_core.interaction import attach, surface_to_world
-from napari_core.model import ButtonEvent, Image, Modifier, WheelEvent
+from napari_core.interaction import attach
+from napari_core.model import (
+    ButtonEvent,
+    Image,
+    Modifier,
+    WheelEvent,
+    surface_to_world,
+)
 
 
 def test_layer_callback_receives_napari_events_with_world_position(

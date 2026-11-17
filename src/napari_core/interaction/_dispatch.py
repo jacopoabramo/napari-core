@@ -13,6 +13,7 @@ from napari_core.model import (
     Modifier,
     View,
     WheelEvent,
+    surface_to_world,
 )
 from napari_core.render import (
     RenderSurface,
@@ -23,7 +24,6 @@ from napari_core.render import (
 )
 
 from ._camera_controller import CameraController
-from ._coordinates import surface_to_world
 
 logger = logging.getLogger(__name__)
 

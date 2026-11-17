@@ -3,8 +3,8 @@ from collections.abc import Generator
 import pytest
 from helpers import FakeSurface, pointer, view_with_image, wheel
 
-from napari_core.interaction import attach, surface_to_world
-from napari_core.model import ButtonEvent, Camera, Image, View
+from napari_core.interaction import attach
+from napari_core.model import ButtonEvent, Camera, Image, View, surface_to_world
 
 
 def view(
@@ -14,16 +14,6 @@ def view(
 ) -> View:
     """Return a view with the given canvas size and camera."""
     return View(canvas_size=size, camera=Camera(zoom=zoom, center=center))
-
-
-def test_surface_middle_is_the_camera_center() -> None:
-    """Map the middle of the surface to the camera centre."""
-    assert surface_to_world(view(), 100, 50) == (10.0, 20.0)
-
-
-def test_surface_offsets_scale_with_zoom() -> None:
-    """Map surface y to world rows and x to columns, divided by the zoom."""
-    assert surface_to_world(view(), 110, 40) == (5.0, 25.0)
 
 
 def test_drag_pans_by_the_pixel_distance_over_zoom(surface: FakeSurface) -> None:
