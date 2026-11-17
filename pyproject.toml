@@ -22,6 +22,10 @@ vispy = [
 dask = [
     "dask>=2026.8.0",
 ]
+pygfx = [
+    "pygfx>=0.18.0",
+    "rendercanvas>=3.0.0",
+]
 
 [build-system]
 requires = ["uv_build>=0.13.6,<0.14.0"]
@@ -31,10 +35,12 @@ build-backend = "uv_build"
 dev = [
     "dask>=2026.8.0",
     "import-linter>=2.16",
+    "pygfx>=0.18.0",
     "pyqt6>=6.12.1",
     "pyrefly>=1.4.1",
     "pyright>=1.1.414",
     "pytest>=9.2.0",
+    "rendercanvas>=3.0.0",
     "ruff>=0.17.5",
     "vispy>=0.17.0",
 ]
@@ -95,3 +101,9 @@ name = "vispy only in the vispy backend"
 type = "protected"
 protected_modules = ["vispy"]
 allowed_importers = ["napari_core.render.vispy"]
+
+[[tool.importlinter.contracts]]
+name = "pygfx only in the pygfx backend"
+type = "protected"
+protected_modules = ["pygfx", "rendercanvas", "wgpu"]
+allowed_importers = ["napari_core.render.pygfx"]
