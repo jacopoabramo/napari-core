@@ -23,7 +23,12 @@ class LayerAdapter(Protocol):
 
 
 class RenderSurface(Protocol[NativeT_co]):
-    """A drawing area that emits events and shows a view."""
+    """A drawing area that emits events and shows a view.
+
+    A surface is hashable and compared by identity, and it can be weakly
+    referenced, so that other code can keep a record of surfaces without
+    keeping them alive.
+    """
 
     @property
     def native(self) -> NativeT_co:
@@ -49,7 +54,11 @@ class RenderSurface(Protocol[NativeT_co]):
     def add_event_handler(
         self, handler: Callable[[SurfaceEvent], None], *types: SurfaceEventType
     ) -> None:
-        """Call `handler` for each event of one of `types`."""
+        """Call `handler` for each event of one of `types`.
+
+        The surface holds the handler strongly until it is removed or the
+        surface is closed.
+        """
         ...
 
     def remove_event_handler(

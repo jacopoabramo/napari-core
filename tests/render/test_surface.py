@@ -9,6 +9,7 @@ from helpers import (
     assign,
     middle,
     mouse_press,
+    mouse_release,
     turn_wheel_away,
     undrawable,
     white_image,
@@ -25,7 +26,7 @@ from napari_core.model import (
     Transform,
     ViewerModel,
 )
-from napari_core.render import RenderBackend, SurfaceEvent
+from napari_core.render import RenderBackend, RenderSurface, SurfaceEvent
 
 pytestmark = pytest.mark.gl
 
@@ -377,24 +378,52 @@ def test_closing_twice_does_nothing(shown: Show) -> None:
     surface.close()
 
 
+def press_and_release(surface: RenderSurface[QWidget]) -> None:
+    """Press and release the left button on the surface."""
+    position = QPoint(30, 40)
+    mouse_press(surface.native, Qt.MouseButton.LeftButton, position)
+    mouse_release(surface.native, Qt.MouseButton.LeftButton, position)
+
+
+def kinds(events: list[SurfaceEvent]) -> list[str]:
+    """Return the event types of `events`."""
+    return [event["event_type"] for event in events]
+
+
 def test_removed_handler_is_not_called(shown: Show) -> None:
     """Stop calling a handler once it is removed from the surface."""
     surface = shown(ViewerModel())
-    seen: list[SurfaceEvent] = []
-    surface.add_event_handler(seen.append, "pointer_down")
-    surface.remove_event_handler(seen.append, "pointer_down")
-    mouse_press(surface.native, Qt.MouseButton.LeftButton, QPoint(30, 40))
-    assert seen == []
+    removed: list[SurfaceEvent] = []
+    kept: list[SurfaceEvent] = []
+    surface.add_event_handler(removed.append, "pointer_down", "pointer_up")
+    surface.add_event_handler(kept.append, "pointer_down", "pointer_up")
+    surface.remove_event_handler(removed.append, "pointer_down", "pointer_up")
+    press_and_release(surface)
+    assert kinds(kept) == ["pointer_down", "pointer_up"]
+    assert removed == []
 
 
 def test_remove_without_types_removes_every_type(shown: Show) -> None:
     """Remove a handler from all its event types when no type is given."""
     surface = shown(ViewerModel())
+    removed: list[SurfaceEvent] = []
+    kept: list[SurfaceEvent] = []
+    surface.add_event_handler(removed.append, "pointer_down", "pointer_up")
+    surface.add_event_handler(kept.append, "pointer_down", "pointer_up")
+    surface.remove_event_handler(removed.append)
+    press_and_release(surface)
+    assert kinds(kept) == ["pointer_down", "pointer_up"]
+    assert removed == []
+
+
+def test_remove_for_some_types_keeps_the_others(shown: Show) -> None:
+    """Keep calling a handler for the types it was not removed from."""
+    surface = shown(ViewerModel())
     seen: list[SurfaceEvent] = []
     surface.add_event_handler(seen.append, "pointer_down", "pointer_up")
-    surface.remove_event_handler(seen.append)
-    mouse_press(surface.native, Qt.MouseButton.LeftButton, QPoint(30, 40))
-    assert seen == []
+    surface.remove_event_handler(seen.append, "pointer_down")
+    press_and_release(surface)
+    assert kinds(seen) == ["pointer_up"]
 
 
 def test_remove_of_unknown_handler_does_nothing(shown: Show) -> None:

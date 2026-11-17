@@ -48,8 +48,11 @@ class Dispatcher:
         self._camera = CameraController(view)
         self._last_pos = (0.0, 0.0)
         self._drags: list[tuple[ButtonEvent, Generator[None, None, None], str]] = []
+        self.active = True
 
     def handle(self, event: SurfaceEvent) -> None:
+        if not self.active:
+            return
         width, height = self._view.canvas_size
         if event["event_type"] != "resize" and (width == 0 or height == 0):
             return
@@ -207,9 +210,14 @@ def attach(view: View, surface: RenderSurface[object]) -> Callable[[], None]:
     A `resize` writes the view's `canvas_size`.
 
     A surface has one attachment, to one view, until the returned function
-    runs. The function removes the handler from the surface. Calling it again,
-    or after the surface was closed, does nothing; a closed surface can be
-    attached again.
+    runs or the surface is closed. The surface must be hashable, weakly
+    referenceable, and hold a handler until it is removed or the surface is
+    closed, as [`RenderSurface`][napari_core.render.RenderSurface] requires.
+
+    The returned function removes the handler from the surface and makes the
+    dispatcher ignore any event it still receives. Calling it again, or after
+    the surface was closed, does nothing. A closed surface can be attached
+    again.
 
     A modifier name that the surface sends and that is not `Shift`,
     `Control`, `Alt` or `Meta` makes the handler raise `ValueError`.
@@ -222,18 +230,17 @@ def attach(view: View, surface: RenderSurface[object]) -> Callable[[], None]:
     if (current := ATTACHED.get(surface)) is not None and current() is not None:
         raise RuntimeError("surface is already attached")
     dispatcher = Dispatcher(view)
-    ATTACHED[surface] = weakref.ref(dispatcher)
     surface.add_event_handler(dispatcher.handle, *EVENT_TYPES)
-    dispatcher_ref = weakref.ref(dispatcher)
+    dispatcher_ref = ATTACHED[surface] = weakref.ref(dispatcher)
     surface_ref = weakref.ref(surface)
 
     def detach() -> None:
-        if (dispatcher := dispatcher_ref()) is None or (
-            surface := surface_ref()
-        ) is None:
+        target, owner = dispatcher_ref(), surface_ref()
+        if target is None or owner is None:
             return
-        surface.remove_event_handler(dispatcher.handle, *EVENT_TYPES)
-        if (current := ATTACHED.get(surface)) is not None and current() is dispatcher:
-            del ATTACHED[surface]
+        target.active = False
+        owner.remove_event_handler(target.handle, *EVENT_TYPES)
+        if (current := ATTACHED.get(owner)) is not None and current() is target:
+            del ATTACHED[owner]
 
     return detach

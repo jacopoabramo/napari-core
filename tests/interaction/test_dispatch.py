@@ -1,4 +1,4 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 
 import numpy as np
 import pytest
@@ -110,6 +110,30 @@ def test_detach_removes_the_handler_and_can_be_repeated(surface: FakeSurface) ->
     detach()
     detach()
     assert surface.handlers == []
+
+
+def test_surface_closed_while_attached_can_be_attached_again(
+    surface: FakeSurface,
+) -> None:
+    """Count a closed surface as detached without a call to detach."""
+    v, _ = view_with_image()
+    attach(v, surface)
+    surface.close()
+    attach(v, surface)
+
+
+def test_detach_during_an_event_stops_the_later_handlers_of_the_dispatcher(
+    surface: FakeSurface,
+) -> None:
+    """Leave the view alone when an event reaches the dispatcher after a detach."""
+    v, _ = view_with_image()
+    detach_ref: list[Callable[[], None]] = []
+    surface.add_event_handler(lambda event: detach_ref[0](), "resize")
+    detach_ref.append(attach(v, surface))
+    surface.emit(
+        {"event_type": "resize", "width": 640.0, "height": 480.0, "pixel_ratio": 1.0}
+    )
+    assert v.canvas_size == (200, 100)
 
 
 def test_raising_callback_is_logged_and_the_rest_still_run(

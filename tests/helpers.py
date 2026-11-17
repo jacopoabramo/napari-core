@@ -86,7 +86,7 @@ class FakeSurface:
         return np.zeros((100, 200, 4), dtype=np.uint8)
 
     def close(self) -> None:
-        pass
+        self.handlers = []
 
     def emit(self, event: SurfaceEvent) -> None:
         """Call the handlers registered for the type of `event`."""
