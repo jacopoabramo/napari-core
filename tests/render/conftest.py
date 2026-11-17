@@ -1,5 +1,7 @@
 """Fixtures of the shared render suite, which runs on every backend."""
 
+# pyright: reportMissingTypeStubs=false
+
 import weakref
 from collections.abc import Generator
 from typing import Final
@@ -8,12 +10,17 @@ import pytest
 from helpers import BackendFactory, Show
 from PyQt6.QtCore import QCoreApplication, QEvent
 from PyQt6.QtWidgets import QApplication, QWidget
+from rendercanvas.qt import QRenderWidget
 
 from napari_core.model import ViewerModel
 from napari_core.render import RenderBackend, RenderSurface
+from napari_core.render.pygfx import PygfxBackend
 from napari_core.render.vispy import VispyBackend
 
-BACKENDS: Final[dict[str, BackendFactory]] = {"vispy": VispyBackend[QWidget]}
+BACKENDS: Final[dict[str, BackendFactory]] = {
+    "pygfx": lambda: PygfxBackend[QWidget](canvas_class=QRenderWidget),
+    "vispy": VispyBackend[QWidget],
+}
 
 
 @pytest.fixture(params=sorted(BACKENDS))

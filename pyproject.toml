@@ -105,5 +105,16 @@ allowed_importers = ["napari_core.render.vispy"]
 [[tool.importlinter.contracts]]
 name = "pygfx only in the pygfx backend"
 type = "protected"
-protected_modules = ["pygfx", "rendercanvas", "wgpu"]
+protected_modules = ["pygfx", "rendercanvas"]
 allowed_importers = ["napari_core.render.pygfx"]
+
+[[tool.importlinter.contracts]]
+name = "No direct wgpu import"
+type = "forbidden"
+source_modules = ["napari_core"]
+forbidden_modules = ["wgpu"]
+
+[[tool.importlinter.contracts]]
+name = "Backends do not import each other"
+type = "independence"
+modules = ["napari_core.render.vispy", "napari_core.render.pygfx"]

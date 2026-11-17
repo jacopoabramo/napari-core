@@ -58,7 +58,11 @@ class RenderSurface(Protocol[NativeT_co]):
         """Call `handler` for each event of one of `types`.
 
         The surface holds the handler strongly until it is removed or the
-        surface is closed.
+        surface is closed. A surface may call the handler later than the
+        toolkit reported the event, after the toolkit's own call has
+        returned. Pointer moves that arrive before the handler is called may
+        reach it as one move to the last position, and wheel turns as one
+        turn that carries their sum.
         """
         ...
 

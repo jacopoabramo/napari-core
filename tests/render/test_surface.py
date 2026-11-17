@@ -160,6 +160,7 @@ def test_wheel_away_from_the_user_zooms_in(shown: Show) -> None:
     surface.add_event_handler(seen.append, "wheel")
     attach(viewer.view, surface)
     turn_wheel_away(surface.native, 2)
+    until(lambda: bool(seen), surface, message="a wheel event")
     (event,) = seen
     assert event["event_type"] == "wheel"
     assert (event["dx"], event["dy"]) == (0.0, -240.0)
@@ -177,6 +178,11 @@ def test_resize_of_the_widget_writes_the_canvas_size(
     attach(viewer.view, surface)
     surface.native.resize(300, 150)
     qapp.processEvents()
+    until(
+        lambda: viewer.view.canvas_size == (300, 150),
+        surface,
+        message="the new canvas size",
+    )
     assert viewer.view.canvas_size == (300, 150)
     surface.close()
 
@@ -205,8 +211,9 @@ def test_mouse_press_reaches_handlers_in_rendercanvas_vocabulary(
     surface = shown(viewer)
     seen: list[SurfaceEvent] = []
     surface.add_event_handler(seen.append, "pointer_down")
-    # Presses are not coalesced, so the handler has run when mousePress returns.
     mouse_press(surface.native, Qt.MouseButton.LeftButton, QPoint(30, 40))
+    # A surface may emit the press after mousePress returns; presses are not merged.
+    until(lambda: bool(seen), surface, message="a pointer_down event")
     (event,) = seen
     assert event["event_type"] == "pointer_down"
     assert (event["x"], event["y"], event["button"]) == (30.0, 40.0, 1)
@@ -431,6 +438,7 @@ def test_removed_handler_is_not_called(shown: Show) -> None:
     surface.add_event_handler(kept.append, "pointer_down", "pointer_up")
     surface.remove_event_handler(removed.append, "pointer_down", "pointer_up")
     press_and_release(surface)
+    until(lambda: len(kept) == 2, surface, message="the press and the release")
     assert kinds(kept) == ["pointer_down", "pointer_up"]
     assert removed == []
 
@@ -444,6 +452,7 @@ def test_remove_without_types_removes_every_type(shown: Show) -> None:
     surface.add_event_handler(kept.append, "pointer_down", "pointer_up")
     surface.remove_event_handler(removed.append)
     press_and_release(surface)
+    until(lambda: len(kept) == 2, surface, message="the press and the release")
     assert kinds(kept) == ["pointer_down", "pointer_up"]
     assert removed == []
 
@@ -455,6 +464,7 @@ def test_remove_for_some_types_keeps_the_others(shown: Show) -> None:
     surface.add_event_handler(seen.append, "pointer_down", "pointer_up")
     surface.remove_event_handler(seen.append, "pointer_down")
     press_and_release(surface)
+    until(lambda: bool(seen), surface, message="the release")
     assert kinds(seen) == ["pointer_up"]
 
 
