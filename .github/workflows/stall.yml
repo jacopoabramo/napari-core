@@ -26,6 +26,10 @@ jobs:
     name: Repeated runs on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    env:
+      # pygfx under Qt does not present frames on wgpu's OpenGL backend, which
+      # wgpu prefers on the Windows runner. Direct3D 12 works.
+      WGPU_BACKEND_TYPE: ${{ matrix.os == 'windows-latest' && 'D3D12' || '' }}
     strategy:
       fail-fast: false
       matrix:

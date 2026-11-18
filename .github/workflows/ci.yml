@@ -33,6 +33,11 @@ jobs:
     # Only Linux is known to have a renderer for both backends on these
     # runners, so the other two report without failing the run.
     continue-on-error: ${{ matrix.os != 'ubuntu-latest' }}
+    env:
+      # On Windows wgpu prefers the Mesa OpenGL adapter that the display action
+      # installs for vispy, and pygfx under Qt does not present frames on wgpu's
+      # OpenGL backend. Direct3D 12 works.
+      WGPU_BACKEND_TYPE: ${{ matrix.os == 'windows-latest' && 'D3D12' || '' }}
     strategy:
       fail-fast: false
       matrix:
