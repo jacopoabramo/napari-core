@@ -1,4 +1,7 @@
 import gc
+import os
+import subprocess
+import sys
 import weakref
 
 import numpy as np
@@ -19,6 +22,45 @@ from napari_core.render import (
 from napari_core.render.pygfx import PygfxBackend
 
 pytestmark = pytest.mark.gl
+
+# wgpu chooses its backend once per process, so the OpenGL case runs apart.
+ON_OPENGL = """
+import logging
+import wgpu
+from PyQt6.QtWidgets import QApplication, QWidget
+from rendercanvas.qt import QRenderWidget
+from napari_core.model import ViewerModel
+from napari_core.render.pygfx import PygfxBackend
+
+print("backend:", wgpu.gpu.request_adapter_sync().info["backend_type"])
+records = []
+handler = logging.Handler()
+handler.emit = records.append
+logging.getLogger("napari_core").addHandler(handler)
+app = QApplication([])
+surface = PygfxBackend[QWidget](canvas_class=QRenderWidget).create_surface(
+    ViewerModel().view, None
+)
+print("warnings:", [r.getMessage() for r in records if r.levelno == logging.WARNING])
+surface.close()
+"""
+
+
+def test_opengl_backend_is_warned_about() -> None:
+    """Warn once that colormaps draw black when wgpu runs on OpenGL."""
+    result = subprocess.run(
+        [sys.executable, "-c", ON_OPENGL],
+        env={**os.environ, "WGPU_BACKEND_TYPE": "OpenGL"},
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=True,
+    )
+    lines = result.stdout.splitlines()
+    if "backend: OpenGL" not in lines:
+        pytest.skip("wgpu finds no OpenGL adapter here")
+    (warnings,) = [line for line in lines if line.startswith("warnings:")]
+    assert warnings.count("1D texture") == 1
 
 
 def shown(

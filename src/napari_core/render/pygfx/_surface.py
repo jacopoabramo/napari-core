@@ -24,6 +24,13 @@ from ._image import BACKEND_NAME, do_nothing
 
 logger = logging.getLogger(__name__)
 
+OPENGL_WARNING: Final = (
+    "pygfx is drawing on wgpu's OpenGL backend, where sampling a 1D texture "
+    "returns zero, so images with a colormap are drawn black. Set the "
+    "environment variable WGPU_BACKEND_TYPE to Vulkan, Metal or D3D12 if "
+    "this machine has one."
+)
+
 POINTER_TYPES: Final = ("pointer_down", "pointer_up", "pointer_move", "double_click")
 ENTER_LEAVE_TYPES: Final = ("pointer_enter", "pointer_leave")
 EVENT_TYPES: tuple[SurfaceEventType, ...] = (
@@ -178,6 +185,8 @@ class PygfxSurface(Generic[NativeT]):
         self._native = native
         self._canvas: BaseRenderCanvas = native
         self._renderer = gfx.WgpuRenderer(self._canvas, pixel_scale=1)
+        if self._renderer.device.adapter.info["backend_type"] == "OpenGL":
+            logger.warning(OPENGL_WARNING)
         scene = gfx.Scene()
         # pygfx clears only in a render pass, and draws none when nothing is
         # visible, so an opaque black background is always drawn.
