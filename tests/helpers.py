@@ -297,7 +297,15 @@ def stall_report(surface: RenderSurface[QWidget] | None) -> str:
             f"waiting_for_present={waiting}",
             f"cancelled_a_frame={getattr(scheduler, '_just_cancelled_a_frame', None)}",
             f"pending_events={pending}",
-            f"task={getattr(scheduler, '_Scheduler__scheduler_task', None)!r}",
+            f"draw_stats={getattr(scheduler, '_draw_stats', None)}",
+        ]
+        group = getattr(native, "_rc_canvas_group", None)
+        loop = None if group is None else group.get_loop()
+        tasks = getattr(loop, "_BaseLoop__tasks", ())
+        parts += [
+            f"loop={loop!r}",
+            f"canvases={None if loop is None else len(loop.get_canvases())}",
+            f"tasks={[repr(task) for task in tasks]}",
         ]
     return " [" + ", ".join(parts) + "]"
 
