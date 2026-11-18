@@ -67,3 +67,19 @@ jobs:
         env:
           WGPU_BACKEND_TYPE: ${{ matrix.backend }}
         run: uv run pytest tests/render tests/pygfx -k pygfx -q -p no:cacheprovider
+
+  mac-opengl:
+    name: macOS, does Qt give an OpenGL widget
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+      - name: Start a display and install what Qt and OpenGL need
+        uses: pyvista/setup-headless-display-action@v5
+        with:
+          qt: true
+          pyvista: false
+      - run: uv sync --locked
+      - name: Probe Qt's OpenGL widget and vispy's canvas
+        run: uv run python .github/gl_probe_mac.py
