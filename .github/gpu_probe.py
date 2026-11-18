@@ -37,7 +37,9 @@ if wanted:
 canvas = RenderCanvas(size=(200, 100), pixel_ratio=1)
 renderer = gfx.WgpuRenderer(canvas, pixel_scale=1)
 used = renderer.device.adapter.info
-print("pygfx uses:", used["backend_type"], "|", used["adapter_type"], "|", used["device"])
+print(
+    "pygfx uses:", used["backend_type"], "|", used["adapter_type"], "|", used["device"]
+)
 
 scene = gfx.Scene()
 scene.add(gfx.Background.from_color("#000"))
