@@ -1318,7 +1318,7 @@ wheels = [
 [[package]]
 name = "rendercanvas"
 version = "3.0.0"
-source = { git = "https://github.com/jacopoabramo/rendercanvas?rev=fix%2Fthreadsafe-call-does-not-initialise#b4a2d3de8d1cc2c1cc5a2d68e14b48e6830ca9c3" }
+source = { git = "https://github.com/jacopoabramo/rendercanvas?rev=fix%2Fthreadsafe-call-does-not-initialise#cd491e3177188073d3a8c4a84ce064d727d75f45" }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
