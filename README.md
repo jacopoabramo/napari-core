@@ -19,11 +19,14 @@ listed in [`DEVIATIONS.md`](DEVIATIONS.md).
 ```
 uv sync
 uv run python examples/show_image.py
+uv run python examples/show_image.py --backend pygfx
 ```
 
-The example needs an OpenGL driver and a Qt binding (PyQt6 is in the
-development group). It opens a window, so it needs a display, and it needs the
-`vispy` and `dask` extras, which the development group already installs.
+`--backend` is `vispy` (the default) or `pygfx`, and `--dask` wraps the stack
+in a dask array first. The example needs a Qt binding (PyQt6 is in the
+development group) and a display, because it opens a window. It needs an
+OpenGL driver for `vispy` and a GPU adapter for `pygfx`. It needs the `vispy`,
+`pygfx` and `dask` extras, which the development group already installs.
 
 ## Run the checks
 

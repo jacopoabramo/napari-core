@@ -3,8 +3,9 @@
 Plane `k` is a horizontal gradient shifted by `k` columns, so stepping is
 visible. Drag with the left button to pan and turn the wheel to zoom.
 
-Run with `uv run python examples/show_image.py`, or add `--dask` to wrap the
-stack in a dask array first.
+Run with `uv run python examples/show_image.py`. Add `--backend pygfx` to draw
+with pygfx instead of vispy, and `--dask` to wrap the stack in a dask array
+first.
 """
 
 import argparse
@@ -16,11 +17,14 @@ import numpy.typing as npt
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QCloseEvent
 from PyQt6.QtWidgets import QApplication, QMainWindow, QSlider, QVBoxLayout, QWidget
+from rendercanvas.qt import QRenderWidget
 from vispy.app import use_app
 
 from napari_core.data import as_layer_data
 from napari_core.interaction import attach
 from napari_core.model import Image, ViewerModel
+from napari_core.render import RenderBackend
+from napari_core.render.pygfx import PygfxBackend
 from napari_core.render.vispy import VispyBackend
 
 PLANES = 30
@@ -33,10 +37,27 @@ def make_stack() -> npt.NDArray[np.uint8]:
     return np.stack([np.tile(np.roll(row, k), (SIZE, 1)) for k in range(PLANES)])
 
 
+def make_backend(name: str) -> RenderBackend[QWidget]:
+    """Return the rendering backend called `name`, `vispy` or `pygfx`.
+
+    Raises
+    ------
+    ValueError
+        If `name` is neither.
+    """
+    match name:
+        case "vispy":
+            return VispyBackend[QWidget]()
+        case "pygfx":
+            return PygfxBackend[QWidget](canvas_class=QRenderWidget)
+        case _:
+            raise ValueError(f"unknown backend {name!r}")
+
+
 class ImageWindow(QMainWindow):
     """A window with the image above a slider over the planes."""
 
-    def __init__(self, use_dask: bool) -> None:
+    def __init__(self, use_dask: bool, backend: str) -> None:
         super().__init__()
         stack = make_stack()
         if use_dask:
@@ -45,7 +66,7 @@ class ImageWindow(QMainWindow):
         self.viewer.layers.append(Image(name="stack", data=as_layer_data(stack)))
         self.viewer.camera.center = (SIZE / 2, SIZE / 2)
         self.viewer.camera.zoom = 2.0
-        self.surface = VispyBackend[QWidget]().create_surface(self.viewer.view, None)
+        self.surface = make_backend(backend).create_surface(self.viewer.view, None)
         attach(self.viewer.view, self.surface)
 
         self.slider = QSlider(Qt.Orientation.Horizontal)
@@ -72,11 +93,15 @@ class ImageWindow(QMainWindow):
 def main() -> None:
     """Parse the arguments, show the window and run the event loop."""
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
+    parser.add_argument(
+        "--backend", choices=["vispy", "pygfx"], default="vispy", help="renderer"
+    )
     parser.add_argument("--dask", action="store_true", help="wrap the stack in dask")
     args = parser.parse_args()
-    use_app("pyqt6")
+    if args.backend == "vispy":
+        use_app("pyqt6")
     app = QApplication.instance() or QApplication(sys.argv)
-    window = ImageWindow(args.dask)
+    window = ImageWindow(args.dask, args.backend)
     window.show()
     sys.exit(app.exec())
 
