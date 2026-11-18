@@ -237,7 +237,10 @@ def test_unattached_surface_keeps_the_default_canvas_size(
     surface.native.resize(300, 150)
     surface.native.show()
     qapp.processEvents()
-    assert surface.get_logical_size() == (300.0, 150.0)
+    width, height = surface.get_logical_size()
+    device_pixel = 1 / surface.get_pixel_ratio()
+    assert width == pytest.approx(300.0, abs=device_pixel)
+    assert height == pytest.approx(150.0, abs=device_pixel)
     assert viewer.view.canvas_size == default
     surface.close()
 

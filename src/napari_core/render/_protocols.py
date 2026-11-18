@@ -44,7 +44,13 @@ class RenderSurface(Protocol[NativeT_co]):
         ...
 
     def get_logical_size(self) -> tuple[float, float]:
-        """Return the size in logical pixels, `(width, height)`."""
+        """Return the size in logical pixels, `(width, height)`.
+
+        The logical size is the physical size divided by the pixel ratio, so
+        at a fractional ratio it may differ from the size the toolkit reports
+        for the widget by less than one device pixel. The sizes in `resize`
+        events follow the same rule.
+        """
         ...
 
     def get_pixel_ratio(self) -> float:
