@@ -1,0 +1,67 @@
+name: Repeat the pygfx render tests
+
+# The pygfx render tests sometimes time out waiting for an event. This runs
+# them many times on each system and keeps the output, to see how often.
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: How many times to run the tests
+        default: "20"
+      select:
+        description: The pytest -k expression
+        default: pygfx
+
+permissions:
+  contents: read
+
+jobs:
+  repeat:
+    name: ${{ inputs.runs }} runs on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+      - name: Start a display and install what Qt and OpenGL need
+        uses: pyvista/setup-headless-display-action@v5
+        with:
+          qt: true
+          pyvista: false
+      - name: Install the software Vulkan driver that wgpu uses
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -y -qq
+          sudo apt-get install -y mesa-vulkan-drivers libegl1-mesa-dev libgl1-mesa-dri libxcb-xfixes0-dev
+      - run: uv sync --locked
+      - name: Say which GPU adapter wgpu finds
+        run: uv run python -c "import wgpu; print(wgpu.gpu.request_adapter_sync().info)"
+      - name: Run the tests repeatedly
+        shell: bash
+        env:
+          RUNS: ${{ inputs.runs }}
+          SELECT: ${{ inputs.select }}
+        run: |
+          mkdir -p stall
+          failed=0
+          for i in $(seq 1 "$RUNS"); do
+            if uv run pytest tests/render -k "$SELECT" -q -p no:cacheprovider > "stall/run-$i.txt" 2>&1; then
+              echo "run $i: passed"
+            else
+              failed=$((failed + 1))
+              echo "run $i: FAILED"
+              grep -E "^(FAILED|ERROR)|timed out" "stall/run-$i.txt" || tail -5 "stall/run-$i.txt"
+            fi
+          done
+          echo "$failed of $RUNS runs failed" | tee stall/summary.txt
+          echo "### $failed of $RUNS runs failed on ${{ matrix.os }}" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: stall-${{ matrix.os }}
+          path: stall
