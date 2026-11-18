@@ -44,3 +44,26 @@ jobs:
       - name: Draw with the backend forced to Direct3D 12
         shell: bash
         run: WGPU_BACKEND_TYPE=D3D12 uv run python .github/gpu_probe.py || true
+
+  tests:
+    name: Windows pygfx tests, backend ${{ matrix.backend || 'chosen by wgpu' }}
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: ["", D3D12, OpenGL]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+      - name: Install Mesa as the headless display action does
+        uses: pyvista/setup-headless-display-action@v5
+        with:
+          qt: true
+          pyvista: false
+      - run: uv sync --locked
+      - name: Run the pygfx render tests
+        shell: bash
+        env:
+          WGPU_BACKEND_TYPE: ${{ matrix.backend }}
+        run: uv run pytest tests/render tests/pygfx -k pygfx -q -p no:cacheprovider
