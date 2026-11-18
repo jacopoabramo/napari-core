@@ -302,8 +302,11 @@ def stall_report(surface: RenderSurface[QWidget] | None) -> str:
         group = getattr(native, "_rc_canvas_group", None)
         loop = None if group is None else group.get_loop()
         tasks = getattr(loop, "_BaseLoop__tasks", ())
+        caller = getattr(loop, "_caller", None)
+        in_gui_thread = None if caller is None else caller.thread() is native.thread()
         parts += [
             f"loop={loop!r}",
+            f"loop_helper_in_gui_thread={in_gui_thread}",
             f"canvases={None if loop is None else len(loop.get_canvases())}",
             f"tasks={[repr(task) for task in tasks]}",
         ]
