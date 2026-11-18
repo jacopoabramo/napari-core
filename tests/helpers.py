@@ -286,7 +286,7 @@ def stall_report(surface: RenderSurface[QWidget] | None) -> str:
     scheduler = getattr(native, "_BaseRenderCanvas__scheduler", None)
     if scheduler is not None:
         present = getattr(scheduler, "_ready_for_present", None)
-        waiting = None if present is None else not present.is_set()
+        waiting = None if present is None else "unset" in repr(present)
         pending = len(
             getattr(getattr(scheduler, "_events", None), "_pending_events", ())
         )
