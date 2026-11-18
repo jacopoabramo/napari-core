@@ -54,11 +54,12 @@ def test_opengl_backend_is_warned_about() -> None:
         capture_output=True,
         text=True,
         timeout=120,
-        check=True,
+        check=False,
     )
     lines = result.stdout.splitlines()
     if "backend: OpenGL" not in lines:
         pytest.skip("wgpu finds no OpenGL adapter here")
+    assert result.returncode == 0, result.stderr
     (warnings,) = [line for line in lines if line.startswith("warnings:")]
     assert warnings.count("1D texture") == 1
 
