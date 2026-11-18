@@ -1,0 +1,46 @@
+name: Probe the GPU adapters on Windows
+
+# pygfx draws a black picture on the Windows runner. This lists the adapters
+# wgpu sees there, with and without the Mesa that the headless display action
+# installs, and draws one white image on each candidate.
+
+on:
+  push:
+    paths:
+      - .github/probe-trigger
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Windows, Mesa ${{ matrix.mesa }}
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        mesa: [installed, absent]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+      - name: Install Mesa as the headless display action does
+        if: matrix.mesa == 'installed'
+        uses: pyvista/setup-headless-display-action@v5
+        with:
+          qt: true
+          pyvista: false
+      - run: uv sync --locked
+      - name: Draw on the adapter pygfx chooses
+        shell: bash
+        run: uv run python .github/gpu_probe.py || true
+      - name: Draw on the software Direct3D 12 adapter
+        shell: bash
+        run: PROBE_ADAPTER="D3D12:Basic" uv run python .github/gpu_probe.py || true
+      - name: Draw on an OpenGL adapter
+        shell: bash
+        run: PROBE_ADAPTER="OpenGL:" uv run python .github/gpu_probe.py || true
+      - name: Draw with the backend forced to Direct3D 12
+        shell: bash
+        run: WGPU_BACKEND_TYPE=D3D12 uv run python .github/gpu_probe.py || true
