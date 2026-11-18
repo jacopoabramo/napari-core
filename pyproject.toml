@@ -3,6 +3,8 @@ name = "napari-core"
 version = "0.1.0"
 description = "Prototype of a core library for napari-like viewers"
 readme = "README.md"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
 authors = [
     { name = "Jacopo Abramo" }
 ]
