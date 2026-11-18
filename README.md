@@ -1,3 +1,6 @@
+> [!CAUTION]
+> Experiment in progress. Do not use.
+
 # napari-core
 
 A prototype of a viewer core: a layer model, slicing and a rendering
