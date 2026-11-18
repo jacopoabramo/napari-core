@@ -14,6 +14,7 @@ from helpers import (
     mouse_move,
     mouse_press,
     mouse_release,
+    own_records,
     turn_wheel_away,
     undrawable,
     until,
@@ -367,11 +368,11 @@ def test_undrawable_layer_appended_later_is_logged_and_skipped(
     viewer.layers.append(white_image())
     qapp.processEvents()
     assert middle(surface.screenshot()) == WHITE
-    (record,) = caplog.records
+    (record,) = own_records(caplog.records)
     assert "'p'" in record.getMessage() and "Undrawable" in record.getMessage()
     assert record.exc_info is not None
     viewer.layers.remove(layer)
-    assert len(caplog.records) == 1
+    assert len(own_records(caplog.records)) == 1
     surface.close()
 
 
@@ -565,7 +566,9 @@ def test_lanczos_is_kept_by_the_model_and_warned_about_where_it_cannot_be_drawn(
         )
     assert layer.interpolation == Interpolation.LANCZOS
     assert middle(surface.screenshot()) == WHITE
-    assert len(caplog.records) == (1 if backend.name in LACKS_LANCZOS else 0)
+    assert len(own_records(caplog.records)) == (
+        1 if backend.name in LACKS_LANCZOS else 0
+    )
     assert (Interpolation.LANCZOS in backend.capabilities.interpolation) == (
         backend.name not in LACKS_LANCZOS
     )

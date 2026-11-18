@@ -1,5 +1,6 @@
 """Plain helpers shared between test modules."""
 
+import logging
 import time
 from collections.abc import Callable
 from typing import Literal, TypeAlias
@@ -336,3 +337,12 @@ def until(
         if surface is not None:
             surface.request_draw()
         wait(5)
+
+
+def own_records(records: list[logging.LogRecord]) -> list[logging.LogRecord]:
+    """Return the log records from `napari_core`, leaving out the libraries'.
+
+    Qt and the render libraries log warnings of their own on some machines,
+    such as Qt saying that an OpenGL widget is not supported.
+    """
+    return [record for record in records if record.name.startswith("napari_core")]
