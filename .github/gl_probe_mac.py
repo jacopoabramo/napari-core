@@ -24,6 +24,7 @@ print("shared OpenGL context:", QOpenGLContext.globalShareContext())
 
 
 def process(seconds: float) -> None:
+    """Process Qt events for `seconds`."""
     deadline = time.perf_counter() + seconds
     while time.perf_counter() < deadline:
         app.processEvents()
@@ -31,6 +32,7 @@ def process(seconds: float) -> None:
 
 
 def middle(widget: QWidget) -> tuple[int, ...]:
+    """Return the RGBA middle pixel of Qt's grab of `widget`."""
     image = widget.grab().toImage().convertToFormat(QImage.Format.Format_RGBA8888)
     data = np.frombuffer(
         image.constBits().asstring(image.sizeInBytes()), dtype=np.uint8
@@ -40,26 +42,31 @@ def middle(widget: QWidget) -> tuple[int, ...]:
 
 
 def describe(name: str, widget: QOpenGLWidget) -> None:
+    """Print the state of the widget's OpenGL context and its grab."""
     context = widget.context()
     print(f"{name}: valid={widget.isValid()} context={context is not None}")
     if context is not None:
         surface_format = context.format()
-        print(
-            f"{name}: context valid={context.isValid()} version={surface_format.version()}"
-            f" profile={surface_format.profile()} renderable={surface_format.renderableType()}"
-        )
+        print(f"{name}: context valid={context.isValid()}")
+        print(f"{name}: version={surface_format.version()}")
+        print(f"{name}: profile={surface_format.profile()}")
+        print(f"{name}: renderable={surface_format.renderableType()}")
     print(f"{name}: grab middle pixel {middle(widget)}")
 
 
 class Plain(QOpenGLWidget):
+    """A QOpenGLWidget that counts the calls Qt makes to it."""
+
     def __init__(self) -> None:
         super().__init__()
         self.calls = {"initializeGL": 0, "paintGL": 0}
 
     def initializeGL(self) -> None:  # noqa: N802
+        """Count a call."""
         self.calls["initializeGL"] += 1
 
     def paintGL(self) -> None:  # noqa: N802
+        """Count a call."""
         self.calls["paintGL"] += 1
 
 
