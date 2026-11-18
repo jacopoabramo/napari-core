@@ -120,3 +120,6 @@ forbidden_modules = ["wgpu"]
 name = "Backends do not import each other"
 type = "independence"
 modules = ["napari_core.render.vispy", "napari_core.render.pygfx"]
+
+[tool.uv.sources]
+rendercanvas = { git = "https://github.com/jacopoabramo/rendercanvas", rev = "fix/threadsafe-call-does-not-initialise" }

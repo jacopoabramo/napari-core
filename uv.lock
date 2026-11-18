@@ -695,7 +695,7 @@ requires-dist = [
     { name = "psygnal", specifier = ">=0.16.1" },
     { name = "pydantic", specifier = ">=2.14.3" },
     { name = "pygfx", marker = "extra == 'pygfx'", specifier = ">=0.18.0" },
-    { name = "rendercanvas", marker = "extra == 'pygfx'", specifier = ">=3.0.0" },
+    { name = "rendercanvas", marker = "extra == 'pygfx'", git = "https://github.com/jacopoabramo/rendercanvas?rev=fix%2Fthreadsafe-call-does-not-initialise" },
     { name = "typing-extensions", specifier = ">=4.16.0" },
     { name = "vispy", marker = "extra == 'vispy'", specifier = ">=0.17.0" },
 ]
@@ -710,7 +710,7 @@ dev = [
     { name = "pyrefly", specifier = ">=1.4.1" },
     { name = "pyright", specifier = ">=1.1.414" },
     { name = "pytest", specifier = ">=9.2.0" },
-    { name = "rendercanvas", specifier = ">=3.0.0" },
+    { name = "rendercanvas", git = "https://github.com/jacopoabramo/rendercanvas?rev=fix%2Fthreadsafe-call-does-not-initialise" },
     { name = "ruff", specifier = ">=0.17.5" },
     { name = "vispy", specifier = ">=0.17.0" },
 ]
@@ -1318,14 +1318,10 @@ wheels = [
 [[package]]
 name = "rendercanvas"
 version = "3.0.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/jacopoabramo/rendercanvas?rev=fix%2Fthreadsafe-call-does-not-initialise#b4a2d3de8d1cc2c1cc5a2d68e14b48e6830ca9c3" }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/43/7d/3232933d76c3bc896074d525533368edefb8d6b8b8512fb0dda86e129783/rendercanvas-3.0.0.tar.gz", hash = "sha256:81f623ee8d9fcd7de5f29df5608027cdbb77f3e29ce22359472692183facec96", size = 122662, upload-time = "2026-11-05T09:42:54.398Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/26/4e/2b772174b6f0c25f49e0bfa3c4df88ede67492d7c68cff0c571b90bfdc01/rendercanvas-3.0.0-py3-none-any.whl", hash = "sha256:74cbda9d654b1effbffb822a5c1ea069a38262e469334bdf4ea2b30ee8cd538e", size = 142888, upload-time = "2026-11-05T09:42:52.835Z" },
 ]
 
 [[package]]
