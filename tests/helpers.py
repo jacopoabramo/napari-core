@@ -266,6 +266,42 @@ def turn_wheel_away(native: QWidget, notches: int) -> None:
     QApplication.sendEvent(native, event)
 
 
+def stall_report(surface: RenderSurface[QWidget] | None) -> str:
+    """Describe the widget and the rendercanvas scheduler of a stalled surface.
+
+    The scheduler's attributes are private to rendercanvas and read by name,
+    so a timeout says whether it was waiting for a frame to be presented. A
+    surface without such a scheduler is described by its widget alone.
+    """
+    if surface is None:
+        return ""
+    native = surface.native
+    window = native.windowHandle()
+    parts = [
+        f"visible={native.isVisible()}",
+        f"exposed={window.isExposed() if window is not None else None}",
+        f"updates={native.updatesEnabled()}",
+        f"size={native.width()}x{native.height()}",
+    ]
+    scheduler = getattr(native, "_BaseRenderCanvas__scheduler", None)
+    if scheduler is not None:
+        present = getattr(scheduler, "_ready_for_present", None)
+        waiting = None if present is None else not present.is_set()
+        pending = len(
+            getattr(getattr(scheduler, "_events", None), "_pending_events", ())
+        )
+        parts += [
+            f"mode={getattr(scheduler, '_mode', None)}",
+            f"enabled={getattr(scheduler, '_enabled', None)}",
+            f"draw_requested={getattr(scheduler, '_draw_requested', None)}",
+            f"waiting_for_present={waiting}",
+            f"cancelled_a_frame={getattr(scheduler, '_just_cancelled_a_frame', None)}",
+            f"pending_events={pending}",
+            f"task={getattr(scheduler, '_Scheduler__scheduler_task', None)!r}",
+        ]
+    return " [" + ", ".join(parts) + "]"
+
+
 def until(
     done: Callable[[], bool],
     surface: RenderSurface[QWidget] | None = None,
@@ -282,7 +318,10 @@ def until(
     deadline = time.monotonic() + timeout
     while not done():
         if time.monotonic() > deadline:
-            raise AssertionError(f"timed out after {timeout} s waiting for {message}")
+            raise AssertionError(
+                f"timed out after {timeout} s waiting for {message}"
+                + stall_report(surface)
+            )
         if surface is not None:
             surface.request_draw()
         wait(5)

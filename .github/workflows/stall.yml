@@ -4,6 +4,11 @@ name: Repeat the pygfx render tests
 # them many times on each system and keeps the output, to see how often.
 
 on:
+  # A workflow started by hand must be on the default branch, so on a working
+  # branch a change to the trigger file starts it.
+  push:
+    paths:
+      - .github/stall-trigger
   workflow_dispatch:
     inputs:
       runs:
@@ -18,7 +23,7 @@ permissions:
 
 jobs:
   repeat:
-    name: ${{ inputs.runs }} runs on ${{ matrix.os }}
+    name: Repeated runs on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -44,8 +49,8 @@ jobs:
       - name: Run the tests repeatedly
         shell: bash
         env:
-          RUNS: ${{ inputs.runs }}
-          SELECT: ${{ inputs.select }}
+          RUNS: ${{ inputs.runs || '20' }}
+          SELECT: ${{ inputs.select || 'pygfx' }}
         run: |
           mkdir -p stall
           failed=0
