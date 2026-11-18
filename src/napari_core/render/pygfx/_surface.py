@@ -9,7 +9,7 @@ from typing import Final, Generic, Protocol, runtime_checkable
 import numpy as np
 import numpy.typing as npt
 import pygfx as gfx
-from rendercanvas import BaseRenderCanvas
+from rendercanvas import BaseLoop, BaseRenderCanvas
 
 from napari_core.model import Layer, View, visible_rect
 from napari_core.render import (
@@ -20,7 +20,7 @@ from napari_core.render import (
     create_layer_adapter,
 )
 
-from ._image import BACKEND_NAME
+from ._image import BACKEND_NAME, do_nothing
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,19 @@ EVENT_TYPES: tuple[SurfaceEventType, ...] = (
     "wheel",
     "resize",
 )
+
+
+def initialise_loop(canvas: BaseRenderCanvas) -> None:
+    """Have the event loop of `canvas` initialised from the calling thread."""
+    # rendercanvas stops its loop when its last canvas closes. A frame download
+    # that finishes afterwards on wgpu's polling thread then initialises the
+    # loop in that thread, where it never starts, and every later canvas stalls.
+    # `call_soon` initialises it here first. The loop sits behind a private
+    # attribute, so a canvas class without one is left alone.
+    group = getattr(canvas, "_rc_canvas_group", None)
+    loop = getattr(group, "get_loop", do_nothing)()
+    if isinstance(loop, BaseLoop):
+        loop.call_soon(do_nothing)
 
 
 @runtime_checkable
@@ -260,6 +273,7 @@ class PygfxSurface(Generic[NativeT]):
         except RuntimeError:
             # The toolkit deleted the widget already; the canvas is closed anyway.
             pass
+        initialise_loop(self._canvas)
 
     def _emit(self, event: SurfaceEvent) -> None:
         for handler, types in self._handlers:
