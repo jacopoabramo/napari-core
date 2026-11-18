@@ -4,6 +4,7 @@
 
 from typing import Protocol, cast
 
+import numpy as np
 from vispy.color import Colormap as VispyColormap
 from vispy.scene.visuals import Image as ImageVisual
 from vispy.visuals.transforms import STTransform
@@ -144,6 +145,9 @@ class Reactions:
 
     def show_plane(self) -> None:
         if (plane := self.view.slicer.response(self.layer)) is not None:
+            # vispy finds no value limits for booleans when it builds the texture.
+            if plane.dtype == np.bool_:
+                plane = plane.astype(np.uint8)
             self.visual.set_data(plane)
 
     def show_visible(self) -> None:

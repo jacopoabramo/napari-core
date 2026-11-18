@@ -4,6 +4,7 @@ import weakref
 import numpy as np
 import pytest
 from helpers import mouse_press, turn_wheel_away, until, white_image
+from PyQt6 import sip
 from PyQt6.QtCore import QCoreApplication, QEvent, QPoint, Qt
 from PyQt6.QtWidgets import QApplication, QWidget
 
@@ -99,8 +100,18 @@ def test_events_have_float_positions_and_only_the_surface_keys(
 def test_canvas_class_that_is_not_a_rendercanvas_is_refused(
     qapp: QApplication,
 ) -> None:
-    """Raise TypeError when the canvas class makes a widget that is not a canvas."""
+    """Close the widget and raise TypeError when the class makes no canvas."""
+    made: list[QWidget] = []
+
+    def make(_parent: QWidget | None) -> QWidget:
+        widget = QWidget()
+        widget.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        made.append(widget)
+        return widget
+
     with pytest.raises(TypeError, match="rendercanvas"):
-        PygfxBackend[QWidget](canvas_class=lambda _parent: QWidget()).create_surface(
+        PygfxBackend[QWidget](canvas_class=make).create_surface(
             ViewerModel().view, None
         )
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
+    assert sip.isdeleted(made[0])

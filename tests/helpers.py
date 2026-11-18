@@ -7,7 +7,7 @@ from typing import Literal, TypeAlias
 import numpy as np
 import numpy.typing as npt
 from PyQt6.QtCore import QEvent, QPoint, QPointF, Qt, QThread
-from PyQt6.QtGui import QMouseEvent, QWheelEvent
+from PyQt6.QtGui import QImage, QMouseEvent, QWheelEvent
 from PyQt6.QtWidgets import QApplication, QWidget
 
 from napari_core.model import (
@@ -239,6 +239,15 @@ def white_image() -> Image:
 def middle(shot: npt.NDArray[np.uint8]) -> tuple[int, ...]:
     """Return the RGB value of the middle pixel of `shot`."""
     return tuple(shot[shot.shape[0] // 2, shot.shape[1] // 2, :3])
+
+
+def grab(native: QWidget) -> npt.NDArray[np.uint8]:
+    """Return the RGBA rows of what `native` shows, as Qt paints it."""
+    image = native.grab().toImage().convertToFormat(QImage.Format.Format_RGBA8888)
+    bits = image.constBits()
+    assert bits is not None
+    pixels = np.frombuffer(bits.asstring(image.sizeInBytes()), dtype=np.uint8)
+    return pixels.reshape(image.height(), image.width(), 4).copy()
 
 
 def turn_wheel_away(native: QWidget, notches: int) -> None:

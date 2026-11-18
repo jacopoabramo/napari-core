@@ -3,10 +3,9 @@ import logging
 import weakref
 from collections.abc import Callable
 
-import numpy as np
-import numpy.typing as npt
 import pytest
 from helpers import (
+    grab,
     middle,
     mouse_move,
     mouse_press,
@@ -17,7 +16,6 @@ from helpers import (
 )
 from PyQt6 import sip
 from PyQt6.QtCore import QCoreApplication, QEvent, QPoint, Qt
-from PyQt6.QtGui import QImage
 from PyQt6.QtWidgets import QApplication, QWidget
 
 from napari_core.interaction import attach
@@ -43,15 +41,6 @@ def shown(viewer: ViewerModel, qapp: QApplication) -> RenderSurface[QWidget]:
     surface.native.show()
     qapp.processEvents()
     return surface
-
-
-def grab(native: QWidget) -> npt.NDArray[np.uint8]:
-    """Return the RGBA rows of a screenshot of `native`."""
-    image = native.grab().toImage().convertToFormat(QImage.Format.Format_RGBA8888)
-    bits = image.constBits()
-    assert bits is not None
-    pixels = np.frombuffer(bits.asstring(image.sizeInBytes()), dtype=np.uint8)
-    return pixels.reshape(image.height(), image.width(), 4).copy()
 
 
 def test_closed_adapter_ignores_the_layer(

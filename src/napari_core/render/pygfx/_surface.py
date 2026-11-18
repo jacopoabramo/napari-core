@@ -1,6 +1,6 @@
 """A rendercanvas canvas drawn by pygfx that follows a view and emits surface events."""
 
-# pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
+# pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false, reportUnknownVariableType=false
 
 import logging
 from collections.abc import Callable
@@ -36,7 +36,12 @@ EVENT_TYPES: tuple[SurfaceEventType, ...] = (
 
 @runtime_checkable
 class PygfxLayerAdapter(LayerAdapter, Protocol):
-    """A layer adapter whose drawing is a world object the surface can add."""
+    """A layer adapter whose drawing is a world object the surface can add.
+
+    The adapter calls `on_change` after every change it shows.
+    """
+
+    on_change: Callable[[], None]
 
     @property
     def visual(self) -> gfx.WorldObject: ...
@@ -45,16 +50,22 @@ class PygfxLayerAdapter(LayerAdapter, Protocol):
 class ViewSync:
     """Keeps the pygfx camera and the layer adapters in step with a view.
 
-    The signals hold these connections to bound methods weakly, so dropping
-    the object is what disconnects them.
+    Every change it shows, and every change an adapter shows, calls
+    `request_draw`. The signals hold these connections to bound methods
+    weakly, so dropping the object is what disconnects them.
     """
 
     def __init__(
-        self, view: View, camera: gfx.OrthographicCamera, scene: gfx.Scene
+        self,
+        view: View,
+        camera: gfx.OrthographicCamera,
+        scene: gfx.Scene,
+        request_draw: Callable[[], None],
     ) -> None:
         self._view = view
         self._camera = camera
         self._scene = scene
+        self._request_draw = request_draw
         self._adapters: dict[int, PygfxLayerAdapter] = {}
         self._undrawable: set[int] = set()
         for layer in view.layers:
@@ -78,6 +89,7 @@ class ViewSync:
             return
         rect = visible_rect(self._view)
         self._camera.show_rect(rect.left, rect.right, rect.top, rect.bottom)
+        self._request_draw()
 
     def sync_layers(self) -> None:
         """Close the adapters of removed layers and make those of new ones.
@@ -98,6 +110,7 @@ class ViewSync:
                 logger.exception(
                     "cannot draw layer %r of type %s", layer.name, type(layer).__name__
                 )
+        self._request_draw()
 
     def _make_adapter(self, layer: Layer) -> PygfxLayerAdapter:
         adapter = create_layer_adapter(BACKEND_NAME, layer, self._view)
@@ -107,6 +120,7 @@ class ViewSync:
                 f"the adapter of {type(layer).__name__} has no pygfx world object"
             )
         self._scene.add(adapter.visual)
+        adapter.on_change = self._request_draw
         return adapter
 
     def close(self) -> None:
@@ -119,11 +133,9 @@ class PygfxSurface(Generic[NativeT]):
     """A rendercanvas canvas, drawn by pygfx, that shows a view and emits events.
 
     The camera of the view moves the picture and the surface never writes to
-    it. A change of the model shows at the canvas's next draw, which
-    `request_draw`, `screenshot` or a resize causes; the surface does not ask
-    for one itself. The canvas queues the events of its toolkit and emits them
-    at its next scheduler turn, merging pointer moves and wheel turns sent in
-    between.
+    it. Each change of the view or of a layer asks the canvas for a draw. The
+    canvas queues the events of its toolkit and emits them at its next
+    scheduler turn, merging pointer moves and wheel turns sent in between.
     The sizes are those of the canvas, which reports 1 by 1 until the widget
     has been shown and has received its first resize.
 
@@ -132,9 +144,11 @@ class PygfxSurface(Generic[NativeT]):
     later is logged once with `logging.exception` and drawn as nothing.
 
     The surface lives as long as its canvas holds the surface's event handler,
-    whether or not the caller keeps the surface. Closing the canvas, with the
-    surface's `close` or with the window's own, closes the surface: it stops
-    following the model and drops its handlers.
+    whether or not the caller keeps the surface. Calling `close` on the
+    surface is the reliable way to release it. Closing a canvas that is a
+    window of its own, with the window's close, also closes the surface; a
+    canvas embedded in another window gets no close when that window closes,
+    so the surface keeps following the model until its `close` is called.
     """
 
     def __init__(
@@ -145,13 +159,15 @@ class PygfxSurface(Generic[NativeT]):
     ) -> None:
         native = canvas_class(parent)
         if not isinstance(native, BaseRenderCanvas):
+            if callable(close := getattr(native, "close", None)):
+                close()
             raise TypeError(f"{canvas_class!r} does not make a rendercanvas canvas")
         self._native = native
         self._canvas: BaseRenderCanvas = native
         self._renderer = gfx.WgpuRenderer(self._canvas, pixel_scale=1)
-        self._renderer.set_clear_value(color=(0.0, 0.0, 0.0, 1.0))
         scene = gfx.Scene()
-        # pygfx clears only in a render pass, and draws none when nothing is visible.
+        # pygfx clears only in a render pass, and draws none when nothing is
+        # visible, so an opaque black background is always drawn.
         scene.add(gfx.Background(None, gfx.BackgroundMaterial((0.0, 0.0, 0.0, 1.0))))
         camera = gfx.OrthographicCamera(maintain_aspect=False)
         camera.local.scale_y = -1
@@ -160,7 +176,9 @@ class PygfxSurface(Generic[NativeT]):
         ] = []
         self._closed = False
         try:
-            self._sync: ViewSync | None = ViewSync(view, camera, scene)
+            self._sync: ViewSync | None = ViewSync(
+                view, camera, scene, self._canvas.request_draw
+            )
         except BaseException:
             self._closed = True
             self._close_canvas()
@@ -249,7 +267,10 @@ class PygfxSurface(Generic[NativeT]):
                 handler(event)
 
     def _on_event(self, event: dict[str, object]) -> None:
-        """Emit a canvas event as a surface event, with only the surface's keys."""
+        """Emit a canvas event as a surface event, with only the surface's keys.
+
+        Of `buttons` and `modifiers`, only the integers and the strings are kept.
+        """
         match event:
             case {"event_type": "close"}:
                 if not self._closed:
@@ -268,8 +289,8 @@ class PygfxSurface(Generic[NativeT]):
                         "x": float(x),
                         "y": float(y),
                         "button": button,
-                        "buttons": buttons,
-                        "modifiers": modifiers,
+                        "buttons": tuple(b for b in buttons if isinstance(b, int)),
+                        "modifiers": tuple(m for m in modifiers if isinstance(m, str)),
                     }
                 )
             case {
@@ -288,8 +309,8 @@ class PygfxSurface(Generic[NativeT]):
                         "y": float(y),
                         "dx": float(dx),
                         "dy": float(dy),
-                        "buttons": buttons,
-                        "modifiers": modifiers,
+                        "buttons": tuple(b for b in buttons if isinstance(b, int)),
+                        "modifiers": tuple(m for m in modifiers if isinstance(m, str)),
                     }
                 )
             case {"event_type": kind} if kind in ENTER_LEAVE_TYPES:

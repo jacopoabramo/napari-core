@@ -26,6 +26,9 @@ class LayerAdapter(Protocol):
 class RenderSurface(Protocol[NativeT_co]):
     """A drawing area that emits events and shows a view.
 
+    A change of the view or of a layer in it shows on the surface without the
+    caller asking for a draw.
+
     A surface is hashable and compared by identity, and it can be weakly
     referenced, so that other code can keep a record of surfaces without
     keeping them alive.

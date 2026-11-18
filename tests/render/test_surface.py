@@ -9,6 +9,7 @@ from cmap import Colormap
 from helpers import (
     Show,
     assign,
+    grab,
     middle,
     mouse_move,
     mouse_press,
@@ -77,6 +78,44 @@ def test_camera_change_moves_the_image(qapp: QApplication, shown: Show) -> None:
     viewer.camera.center = (10_000.0, 10_000.0)
     qapp.processEvents()
     assert middle(surface.screenshot()) == BACKGROUND
+    surface.close()
+
+
+@pytest.mark.parametrize("change", ["hide the layer", "move the camera away"])
+def test_model_change_shows_without_a_draw_request(shown: Show, change: str) -> None:
+    """Show a change of the model on the widget without anyone asking for a draw."""
+    viewer = ViewerModel()
+    layer = white_image()
+    viewer.layers.append(layer)
+    viewer.camera.center = (25.0, 25.0)
+    surface = shown(viewer)
+    until(lambda: middle(grab(surface.native)) == WHITE, message="the image")
+    match change:
+        case "hide the layer":
+            layer.visible = False
+        case _:
+            viewer.camera.center = (10_000.0, 10_000.0)
+    until(lambda: middle(grab(surface.native)) == BACKGROUND, message=change)
+    surface.close()
+
+
+@pytest.mark.parametrize("dtype", ["float64", "int64", "bool"])
+def test_data_of_any_dtype_is_drawn(shown: Show, dtype: str) -> None:
+    """Draw data the backend has no texture format for, at creation and assigned."""
+    viewer = ViewerModel()
+    layer = Image(
+        name="a",
+        data=np.ones((50, 50), dtype=dtype),
+        appearance=IntensityAppearance(contrast_limits=(0.0, 1.0)),
+    )
+    viewer.layers.append(layer)
+    viewer.camera.center = (25.0, 25.0)
+    surface = shown(viewer)
+    assert middle(surface.screenshot()) == WHITE
+    layer.data = np.zeros((50, 50), dtype=dtype)
+    assert middle(surface.screenshot()) == BACKGROUND
+    layer.data = np.ones((50, 50), dtype=dtype)
+    assert middle(surface.screenshot()) == WHITE
     surface.close()
 
 
